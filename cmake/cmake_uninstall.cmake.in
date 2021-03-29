@@ -1,0 +1,41 @@
+#
+# CMake uninstall command
+#
+# This template outlines the commands to execute when creating the "uninstall"
+# target. It is templated so that the files will be uninstalled based on the
+# CMAKE_INSTALL_PREFIX.
+#
+
+set( INSTALL_MANIFEST_PATH "@CMAKE_CURRENT_BINARY_DIR@/install_manifest.txt" )
+if( NOT EXISTS ${INSTALL_MANIFEST_PATH} )
+	message( FATAL_ERROR "Cannot find install manifest: ${INSTALL_MANIFEST_PATH}" )
+endif()
+
+file( READ ${INSTALL_MANIFEST_PATH} files )
+string( REGEX REPLACE "\n" ";" files "${files}" )
+
+foreach( file ${files} )
+	set( TEMPFILE $ENV{DESTDIR}${file} )
+	message( STATUS "Uninstalling: ${TEMPFILE}" )
+	if( EXISTS "${TEMPFILE}" )
+		exec_program( "@CMAKE_COMMAND@" ARGS "-E remove ${TEMPFILE}"
+			OUTPUT_VARIABLE rm_out
+			RETURN_VALUE rm_retval
+		)
+		if( NOT "${rm_retval}" STREQUAL 0 )
+			message( FATAL_ERROR "Problem removing ${TEMPFILE}" )
+		endif()
+	else( EXISTS "${TEMPFILE}" )
+		message( STATUS "File ${TEMPFILE} does not exist." )
+	endif()
+endforeach()
+
+# Delete the 'dist' directory located
+exec_program( "@CMAKE_COMMAND@" ARGS "-E remove_directory @DIST_INSTALL_DIRECTORY@" 
+	OUTPUT_VARIABLE rmdir_out
+	RETURN_VALUE rm_retval
+)
+if( NOT ${rmdir_retval} STREQUAL 0 )
+	message( STATUS "Error cleaning up directory: @DIST_INSTALL_DIRECTORY@" )
+endif()
+

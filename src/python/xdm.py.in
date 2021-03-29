@@ -1,0 +1,443 @@
+#!/usr/bin/env python
+#-------------------------------------------------------------------------
+#   Copyright 2002-2020 National Technology & Engineering Solutions of
+#   Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
+#   NTESS, the U.S. Government retains certain rights in this software.
+#
+#   This file is part of the Xyce(TM) XDM Netlist Translator.
+#   
+#   Xyce(TM) XDM is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#  
+#   Xyce(TM) XDM is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#   
+#   You should have received a copy of the GNU General Public License
+#   along with the Xyce(TM) XDM Netlist Translator.
+#   If not, see <http://www.gnu.org/licenses/>.
+#-------------------------------------------------------------------------
+
+
+import argparse
+import datetime
+import logging
+import os
+import shutil
+import sys
+import types
+#  import SpiritExprCommon
+#  import HSpiceExprSpirit
+
+#  from copy import deepcopy
+#  from collections import OrderedDict
+#  from pprint import pformat
+from xdm.errorHandling.CallCount import CallCount
+from xdm.index.DEVICES_INDEX import DEVICES_INDEX
+from xdm.index.SRC_LINE_INDEX import SRC_LINE_INDEX
+from xdm.index.COMMANDS_INDEX import COMMANDS_INDEX
+from xdm.inout.readers.GenericReader import GenericReader
+from xdm.inout.readers.PSPICENetlistBoostParserInterface import PSPICENetlistBoostParserInterface
+from xdm.inout.readers.HSPICENetlistBoostParserInterface import HSPICENetlistBoostParserInterface
+from xdm.inout.readers.SpectreNetlistBoostParserInterface import SpectreNetlistBoostParserInterface
+from xdm.inout.readers.TSPICENetlistBoostParserInterface import TSPICENetlistBoostParserInterface
+from xdm.inout.readers.XyceNetlistBoostParserInterface import XyceNetlistBoostParserInterface
+from xdm.inout.writers.Writer import Writer
+from xdm.inout.xml import XmlFactory
+from xdm.expr import expr_utils
+from xdm.expr.Context import Context
+#  from xdm import Types
+
+XDM_VERSION = "@XDM_MAJOR_VERSION@.@XDM_MINOR_VERSION@.@XDM_PATCH_VERSION@"
+
+# Test to see if we have been bundled within PyInstaller (i.e., frozen) and
+# change needed system variables accordingly to set the path to the current
+# working directory of the program.
+pyinstaller_debug = False
+frozen_bundle = False
+execDirName = ''
+execBaseName = ''
+if getattr(sys, 'frozen', False):
+    # we are running in a bundle
+    frozen_bundle = True
+    execDirName = sys._MEIPASS
+    execBaseName = os.path.basename(sys.executable)
+else:
+    # we are running in a normal Python environment
+    (execDirName, execBaseName) = os.path.split(sys.argv[0])
+    execDirName = os.path.abspath(execDirName)
+
+if pyinstaller_debug is True:
+    if frozen_bundle is True:
+        print('\nwe are frozen and bundled under PyInstaller\n')
+    else:
+        print('\nwe are NOT frozen or bundled under PyInstaller\n')
+
+    print('execDirName is', execDirName)
+    print('execBaseName is', execBaseName)
+    print('sys.argv[0] is', sys.argv[0])
+    print('sys.executable is', sys.executable)
+    print('os.getcwd is', os.getcwd())
+    print('\n\n')
+
+
+def modification_date(filename):
+    t = os.path.getmtime(filename)
+    return datetime.datetime.fromtimestamp(t)
+
+
+def get_value(current_device):
+    device_type = current_device.device_type
+    if device_type == 'R':
+        return current_device.get_param('R')
+    elif device_type == 'C':
+        return current_device.get_param('C')
+    elif device_type == 'L':
+        return current_device.get_param('L')
+    elif device_type == 'X':
+        return current_device.get_prop('SUBCIRCUITNAME_VALUE').name
+    elif device_type == 'D' or device_type == 'Q':
+        if hasattr(current_device.model, 'name'):
+            return current_device.model.name
+        elif len(current_device.lazy_statements) > 0:
+            return current_device.lazy_statements.keys()[0]  # help me
+        else:
+            return 'Unknown'
+    elif device_type == 'V':
+        if 'DC_VALUE' in current_device.props:
+            return current_device.get_prop('DC_VALUE').dc_value
+        elif 'TRANSIENT' in current_device.props and 'I2' in \
+                current_device.get_prop('TRANSIENT').trans_params:
+            return current_device.get_prop('TRANSIENT').trans_params['I2']
+        else:
+            return 'Unknown'
+    elif hasattr(current_device.model, 'get_name'):
+        return current_device.model.name
+    else:
+        return 'Unknown'
+
+
+base_path = execDirName
+xdm_mod_date = str(modification_date(sys.executable))
+
+parser = argparse.ArgumentParser(
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    description='xdm ' + XDM_VERSION + ' (' + xdm_mod_date + ')' + """:
+    Translates input netlist file by creating a new netlist file of a
+    different netlist file format. The translated input file (of the same name)
+    is written into the specified output directory - if you used the same
+    directory as the input netlist file, the original file will be overwritten.
+    xdm also supports a device query interface for the SAW environment.""")
+
+
+parser.add_argument('input_file', nargs=1,
+                    type=argparse.FileType('r'),
+                    help='The input netlist file')
+
+parser.add_argument('-s', '--source_file_format', nargs='?', type=str,
+                    choices=['hspice', 'tspice', 'pspice', 'spectre', 'xyce'],
+                    default="pspice", dest='input_file_format',
+                    help='The source/input netlist file format')
+
+parser.add_argument('-d', '--dir_out', nargs='?', type=str,
+                    default="default_dir", dest='dir_out',
+                    help='The output directory')
+
+parser.add_argument('-o', '--output_file_format', nargs='?',
+                    type=str, choices=['xyce'], default="xyce",
+                    dest='output_file_format',
+                    help='The output netlist file format')
+
+parser.add_argument('--auto', action='store_true',
+                    help='Automatically translate include and library files')
+
+parser.add_argument('--eval', action='store_true', help='Evaluate functions during translation')
+
+parser.add_argument('-l', '--logging', action='store', type=str,
+                    default="WARN", dest='log_level',
+                    choices=['DEBUG', 'INFO', 'WARN', 'ERROR'],
+                    help="""Control the level of screen logging output: WARN
+                    is quiet - only ERROR and WARN level messages will be sent
+                    to the screen""")
+
+parser.add_argument(
+    '-q', '--query_device', action='store',
+    type=str, default="None", dest='device_type',
+    choices=['R', 'C', 'D', 'L', 'X', 'Q', 'ALL'],
+    help='Query for a device type of interest within the SAW environment')
+
+
+# Print license whether or not any other arguments are passed to the command
+# line.
+class LicenseAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option=None):
+        with open(os.path.join(base_path, 'License.txt'), 'r') as f:
+            for line in f:
+                sys.stdout.write(line)
+        sys.exit(0)
+
+
+parser.register('action', 'license', LicenseAction)
+parser.add_argument(
+    '--license', action='license', nargs=0,
+    help='Display the license for this version of XDM')
+
+args = parser.parse_args()
+
+if args.input_file is None or len(args.input_file) < 1:
+    args.error("No input file specified! Run with -h for help.")
+elif len(args.input_file) > 1:
+    args.error("Too many input files specified. Run with -h for help.")
+
+append_list = ['spectre']
+
+append_device_type = False
+if args.input_file_format in append_list:
+    append_device_type = True
+
+file_types = {
+    'xyce': XyceNetlistBoostParserInterface,
+    'pspice': PSPICENetlistBoostParserInterface,
+    'hspice': HSPICENetlistBoostParserInterface,
+    'tspice': TSPICENetlistBoostParserInterface,
+    'spectre': SpectreNetlistBoostParserInterface
+}
+
+origin_combine_off_dict = {
+    'xyce': False,
+    'pspice': False,
+    'hspice': False,
+    'tspice': False,
+    'spectre': True
+}
+
+xml_files = {
+    'xyce': os.path.join(base_path, "xyce.xml"),
+    'pspice': os.path.join(base_path, "pspice.xml"),
+    'hspice': os.path.join(base_path, "hspice.xml"),
+    'tspice': os.path.join(base_path, "tspice.xml"),
+    'spectre': os.path.join(base_path, "spectre.xml")
+}
+
+pspice_xml = xml_files['pspice']
+hspice_xml = xml_files['hspice']
+tspice_xml = xml_files['tspice']
+spectre_xml = xml_files['spectre']
+
+numeric_level = getattr(logging, args.log_level.upper(), None)
+if not isinstance(numeric_level, int):
+    # TODO look into what log_level is doing here.
+    # How should this be tested?
+    # As found, the line below the exception was unreachable. Should this
+    # conditional set log_level or numeric_level?
+    raise ValueError("""Invalid log level: %s - setting to default level
+    \'WARN\'""" % args.log_level)
+    # numeric_level = getattr(logging, "WARN", None)
+
+logging.basicConfig(stream=sys.stdout, level=numeric_level,
+                    format='\t%(asctime)s %(levelname)s:  %(message)s',
+                    datefmt='%m/%d/%Y %I:%M:%S %p')
+
+logging.info = CallCount(logging.info)
+logging.warning = CallCount(logging.warning)
+logging.error = CallCount(logging.error)
+logging.critical = CallCount(logging.critical)
+
+
+if args.device_type == "None":  # Standard xdm flavor conversion execution
+    print('\n\n' + execBaseName + ' ' + XDM_VERSION + ' (last changed on ' +
+          xdm_mod_date + ')'' at \n\t' + sys.argv[0] +
+          '\n\nis translating the file: \n\n\t\'' +
+          args.input_file[0].name + '\' (input format=' + args.input_file_format +
+          ') \n\t\tusing xml definition ' + xml_files[args.input_file_format] +
+          '\n\t => and is creating the translated files under the directory \'' +
+          args.dir_out + '\' (output format = ' + args.output_file_format +
+          ') \n\t\tusing xml definition ' + xml_files[args.output_file_format] +
+          '\n')
+
+    calling_command = str()
+    for i in range(len(sys.argv)):
+        if isinstance(type(sys.argv[i]), str) and i != 0:
+            calling_command += " '" + sys.argv[i] + "'"
+        elif i == 0:
+            calling_command += execBaseName
+        else:
+            calling_command += " " + sys.argv[i]
+    print('Original calling command for this run was:\n\n        ' + calling_command + '\n\n')
+
+in_xml_factory = XmlFactory(xml_files[args.input_file_format])
+in_xml_factory.read()
+
+reader = None
+try:
+    reader = GenericReader(args.input_file[0].name,
+                           file_types[args.input_file_format.lower()],
+                           in_xml_factory.language_definition,
+                           pspice_xml, spectre_xml, tspice_xml, hspice_xml,
+                           append_prefix=append_device_type,
+                           auto_translate=args.auto)
+except IOError:
+    logging.critical('ERROR: Input file ' + args.input_file[0].name + ' was not found. Aborting.')
+
+files_to_copy = []
+if args.device_type == "None":  # Standard xdm flavor conversion execution
+    if reader is not None:
+        sli = SRC_LINE_INDEX()
+        reader.name_scope_index.add_index(sli)
+        reader.name_scope_index.add_index(DEVICES_INDEX())
+        reader.name_scope_index.add_index(COMMANDS_INDEX())
+        reader.read()
+        files_to_copy.extend(reader.reader_state.pwl_files)
+
+        if not os.path.isdir(args.dir_out):
+            os.makedirs(args.dir_out)
+
+        if args.eval:  # also evaluate functions
+            curr_hier = []
+            context_list = []
+            sibling_scope = []
+            print("Tracing device hierarchy...")
+            expr_utils.trace_subckt_instantiations(
+                curr_hier, reader.name_scope_index, [], [], context_list, [],
+                is_top_level=True)
+
+            # find & evaluate functions used in subcircuit instantiations
+            subckts_to_update = []
+            subckt_update_info = {}
+            for context in context_list:
+                context.add_st_to_context(reader.name_scope_index.all_statements_in_scope, "")
+
+                for subckt_scope in context.scopes_in_context:
+                    if subckt_scope.subckt_command.name:
+                        subckts_to_update.append(subckt_scope)
+
+                context.find_funcs_to_be_evaluated()
+
+                if not context.func_expr:
+                    continue
+
+                expr_parser = expr_utils.expr_spirit_interface(context)
+
+                expr_parser.py_list = context.func_hierarchy
+                expr_parser.py_list_2 = context.func_expr
+                output = expr_parser.eval_statements(expr_parser.py_list, expr_parser.py_list_2)
+                expr_utils.update_subckt_instantiations("", reader.name_scope_index, [], [], [], context.func_hierarchy,
+                                                        context.func_expr, output.evalResult, subckt_update_info,
+                                                        is_top_level=True)
+
+            # update to subckt definitions
+            expr_utils.update_subckt(subckts_to_update, subckt_update_info)
+
+            # find & evaluate functions used in top level circuit
+            context = Context([], [])
+            context.add_st_to_context(reader.name_scope_index.all_statements_in_scope, "")
+            context.find_funcs_to_be_evaluated(global_context=True)
+
+            expr_parser = expr_utils.expr_spirit_interface(context)
+
+            expr_parser.py_list = context.func_hierarchy
+            expr_parser.py_list_2 = context.func_expr
+            output = expr_parser.eval_statements(expr_parser.py_list, expr_parser.py_list_2)
+            expr_utils.update_params("", context.func_hierarchy, context.func_expr,
+                                     output.evalResult, context.st_in_context, context.scope_names)
+
+            # comment out functions in all scopes
+            expr_utils.comment_out_funcs(sli)
+
+        for fl, objs in sli:
+            if fl:
+                combine_off = origin_combine_off_dict[args.input_file_format]
+                A = Writer(args.dir_out, xml_files[args.output_file_format],
+                           in_xml_factory.language_definition,
+                           combine_off=combine_off)
+                A.write_objects(objs, XDM_VERSION,
+                                xml_files[args.input_file_format],
+                                xml_files[args.output_file_format])
+
+    # Copy files into common location
+    for copy_file in files_to_copy:
+        file_at_base = os.path.join(base_path, copy_file.replace('"', ''))
+        file_at_input_file_dir = os.path.join(
+            os.path.dirname(args.input_file[0].name), copy_file.replace('"', ''))
+        if os.path.isfile(file_at_base):
+            shutil.copy(file_at_base, args.dir_out)
+        elif os.path.isfile(file_at_input_file_dir):
+            shutil.copy(file_at_input_file_dir, args.dir_out)
+        else:
+            logging.warning('Could not find file ' + copy_file)
+
+else:  # SAW query execution
+    sli = SRC_LINE_INDEX()
+    dev_index = DEVICES_INDEX()
+
+    if reader is not None:
+        reader.name_scope_index.add_index(sli)
+        reader.name_scope_index.add_index(dev_index)
+        reader.read()
+        files_to_copy = []
+        files_to_copy.extend(reader.reader_state.pwl_files)
+
+    if args.device_type == "ALL":
+        devices = [item for sublist in dev_index.statement_dict.values()
+                   for item in sublist]
+    else:
+        devices = dev_index.get_statements(args.device_type)
+
+    # Ordering of query outputs - for intermittent fails in Xyce regression
+    # because of flipped output order. See issue #157 and #139 on XDM gitlab.
+    oline = ""
+    master_olist = []
+    device_types = []
+    master_device_list = []
+    master_line_num = []
+
+    # first, group the devices by device type (C, R, L, V, D).
+    for device in devices:
+        if device.device_type not in device_types:
+            device_types.append(device.device_type)
+            master_device_list.append([])
+            master_line_num.append([])
+
+        # save line numbers in lists in master_line_num, grouped by device type
+        master_ind = device_types.index(device.device_type)
+        master_line_num[master_ind].append(device.line_num[0])
+
+        # save output lines in lists in master_device_list, grouped by device
+        # type
+        value = get_value(device)
+        oline = os.path.basename(device.file) + ' ,\t' + \
+            str(device.line_num[0]) + ' ,\t' + device.device_type + \
+            device.get_prop('MY_NAME') + ' ,\t' + value
+
+        master_device_list[master_ind].append(oline)
+
+    # next, within each category of device, sort by line number
+    for line_num_list, olist in zip(master_line_num, master_device_list):
+        line_num_list, olist = zip(*sorted(zip(line_num_list, olist)))
+        for oline in olist:
+            master_olist.append(oline)
+    for oline in master_olist:
+        print(oline)
+
+if args.device_type == "None":  # Standard xdm flavor conversion execution
+    # Report total number of error calls and exit with the correct status code
+    print("\n\n=== xdm execution complete: \n")
+    print("    Total critical issues reported \t\t\t = %s: " % logging.critical.currentCount)
+    print("    Total          errors reported \t\t\t = %s: " % logging.error.currentCount)
+    print("    Total          warnings reported \t\t\t = %s: " % logging.warning.currentCount)
+    print("    Total          information messages reported \t = %s: \n" % logging.info.currentCount)
+
+    if (logging.critical.currentCount + logging.error.currentCount) > 0:
+        print("FAILURE: xdm completion status flag = %s: \n" % 1)
+        sys.exit(1)
+    else:
+        print("SUCCESS: xdm completion status flag = %s: \n" % 0)
+        sys.exit(0)
+else:  # SAW query execution
+    if (logging.critical.currentCount + logging.error.currentCount) > 0:
+        sys.exit(1)
+    else:
+        sys.exit(0)

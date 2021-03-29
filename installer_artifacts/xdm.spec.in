@@ -1,0 +1,49 @@
+# -*- mode: python -*-
+
+block_cipher = None
+
+options = [
+	('W ignore', None, 'OPTION'),
+	('u', None, 'OPTION'),
+	('d', None, 'OPTION')
+]
+
+hidden_imports = [
+	'xdm.errorHandling',
+	'xdm.inout',
+	'xdm.index',
+	'xdm'
+]
+
+data_files = [
+	('./*.xml', '.'),
+	('./License.txt', '.')
+]
+
+main_target = ['xdm_bdl.py'];
+
+a = Analysis(main_target,
+             pathex=['./', '@Boost_LIBRARY_DIR_RELEASE@', '@Boost_LIBRARY_DIR_DEBUG@'],
+             binaries=None,
+             datas=data_files,
+             hiddenimports=hidden_imports,
+             hookspath=[],
+             runtime_hooks=[],
+             excludes=[],
+             win_no_prefer_redirects=False,
+             win_private_assemblies=False,
+             cipher=block_cipher)
+pyz = PYZ(a.pure, a.zipped_data,
+             cipher=block_cipher)
+
+exe = EXE(pyz,
+          a.scripts,
+          options,
+          a.binaries,
+          a.zipfiles,
+          a.datas,
+          name='xdm_bdl',
+          debug=False,
+          strip=False,
+          upx=True,
+          console=True )

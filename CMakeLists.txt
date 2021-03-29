@@ -1,0 +1,555 @@
+#
+# CMakeLists.txt for XDM
+#
+
+# Set the project.
+project(xdm LANGUAGES CXX)
+
+cmake_minimum_required( VERSION 3.12 )
+
+cmake_policy(SET CMP0074 OLD)
+
+# Use C++11
+set( CMAKE_CXX_STANDARD 11 )
+
+# Is this an option?
+set(CMAKE_LEGACY_CYGWIN_WIN32 0)
+
+# Report what kind of build cmake believes we are doing
+message("Build Type: ${CMAKE_BUILD_TYPE}")
+
+#------------------------------------
+# Process the Version Numbers
+#------------------------------------
+set(XDM_MAJOR_VERSION "2")
+set(XDM_MINOR_VERSION "2")
+set(XDM_PATCH_VERSION "0")
+if( NOT XDM_MAJOR_VERSION MATCHES "[0-9]+" )
+  set( XDM_MAJOR_VERSION "X" CACHE STRING "The major version number for this build." )
+endif()
+if( NOT XDM_MINOR_VERSION MATCHES "[0-9]+" )
+  set( XDM_MINOR_VERSION "X" CACHE STRING "The minor version number for this build." )
+endif()
+if( NOT XDM_PATCH_VERSION MATCHES "[0-9]+" )
+  set( XDM_PATCH_VERSION "X" CACHE STRING "The patch version number for this build." )
+endif()
+
+# Setup "GIT_COMMIT_HASH" to store the current commit.
+# This also requires setting up a target that will check the current commit
+# on every build, to make sure it is up-to-date.
+set( GIT_COMMIT_HASH "GitHashNotAvailable" )
+find_package(Git)
+if( Git_FOUND )
+  message( "Found git: ${GIT_EXECUTABLE}" )
+  message( "-- Enabling git patch version numbering." )
+
+  execute_process(
+    COMMAND ${GIT_EXECUTABLE} rev-parse --short --verify HEAD
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    OUTPUT_VARIABLE GIT_COMMIT_HASH
+  )
+  string( STRIP "${GIT_COMMIT_HASH}" GIT_COMMIT_HASH )
+
+  set( GIT_HASH_FILE "${CMAKE_CURRENT_BINARY_DIR}/GIT_HASH" )
+  execute_process( COMMAND ${CMAKE_COMMAND} -E touch ${GIT_HASH_FILE} )
+
+  add_custom_target( CheckPatch ALL )
+  add_custom_command( TARGET CheckPatch
+    COMMAND ${CMAKE_COMMAND}
+    ARGS
+    # First, set all of the variables we need to pass.
+    "-DCMAKE_COMMAND=${CMAKE_COMMAND}"
+    "-DPROJECT_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+    "-DPROJECT_BINARY_DIR=${PROJECT_BINARY_DIR}"
+    "-DGIT_EXECUTABLE=${GIT_EXECUTABLE}"
+    "-DGIT_HASH_FILE=${GIT_HASH_FILE}"
+    # Now, run our script to set the patch number correctly.
+    -P ${CMAKE_SOURCE_DIR}/cmake/CheckPatchVersion.cmake
+  )
+endif()
+
+message( "Building Version: ${XDM_MAJOR_VERSION}.${XDM_MINOR_VERSION}.${XDM_PATCH_VERSION}" )
+
+# Find Python. 
+# Note that the user can specify their python installation explicitly by setting:
+# - PYTHON_INCLUDE_DIR --> Path to python.h header.
+# - PYTHON_LIBRARY --> Path to libpython*.so (or python.dll on Windows?)
+
+#------------------------------------
+# Find Python
+#------------------------------------
+find_package( PythonLibs 3 REQUIRED )
+if( PythonLibs_NOTFOUND )
+  message( ERROR "Could not find Python installation!")
+  message( "To set a specific Python version, set the following CMake variables:")
+  message( " - PYTHON_LIBRARY -> path to libpython" )
+  message( " - PYTHON_INCLUDE_DIR -> path to dir with Python.h file." )
+endif()
+
+# Add the Python include directories to the search path.
+include_directories( "${PYTHON_INCLUDE_DIRS}" )
+
+message("PYTHON Info:" )
+message("  *Includes = ${PYTHON_INCLUDE_DIRS}")
+message("  *Lib = ${PYTHON_LIBRARY}")
+
+# Set the directory to copy over all of the (python) build files to.
+set( DIST_BUILD_DIR "${PROJECT_BINARY_DIR}/xdm_bundle" )
+
+# Search for PyInstaller and create the standalone target, if found.
+message( "PYINSTALLER Info: " )
+find_program( PYINSTALLER_PATH NAMES "pyinstaller" )
+if( NOT PYINSTALLER_PATH )
+  message("-- Could NOT find pyinstaller. Will not create standalone executable." )
+  message("-- NOTE: Set PYINSTALLER_PATH to the pyinstaller executable to enable" )
+  message("--       creation of the standalone executable.")
+  message( ERROR "pyinstaller is required for XDM!" )
+else()
+  message("  *PyInstaller Path = ${PYINSTALLER_PATH}" )
+
+  # The custom command to generate the standalone executable should
+  # place the result at:
+  set( XDM_EXE_PATH "${DIST_BUILD_DIR}/dist/xdm_bdl${CMAKE_EXECUTABLE_SUFFIX}" )
+endif()
+
+#------------------------------------
+# Find Boost (with Boost Python)
+#------------------------------------
+set(Boost_PYTHON_VERSION "python3" CACHE STRING "libboost_<Boost_PYTHON_VERSION><*>.<ext>")
+find_package( Boost 1.58 COMPONENTS ${Boost_PYTHON_VERSION} REQUIRED )
+if( NOT Boost_FOUND ) 
+  message(STATUS "Could not find Boost Python installation!")
+  message(STATUS "Check 1:")
+  message(STATUS "You might need to set BOOST_ROOT.")
+  message(STATUS "Check 2:")
+  message(STATUS "Please specify Boost_PYTHON_VERSION via CMake.")
+  message(STATUS "Linux example: libboost_<Boost_PYTHON_VERSION>.{so,a}")
+  message(STATUS "Mac example: libboost_<Boost_PYTHON_VERSION>.{dylib,a}")
+  message(STATUS "Windows example: libboost_<Boost_PYTHON_VERSION>.{dll,lib")
+  message(FATAL_ERROR "Exiting...")
+else()
+  include_directories( "${Boost_INCLUDE_DIRS}" )
+  message(STATUS "BOOST Includes = ${Boost_INCLUDE_DIRS}")
+  if(Boost_NO_BOOST_CMAKE)
+    message(STATUS "BOOST Library Path = ${Boost_LIBRARY_DIRS}")
+  endif()
+endif()
+
+#------------------------------------
+# Platform-specific Stuff
+#------------------------------------
+
+# Stuff to manage new rpath security on OS X 10.11.x (El Capitan)
+if(APPLE)
+  set(CMAKE_MACOSX_RPATH TRUE)
+
+  # The following settings were copied from
+  # https://cmake.org/Wiki/CMake_RPATH_handling
+  # to avoid the rpath issue that appears on OS X El Capitan
+  
+  # use, i.e. don't skip the full RPATH for the build tree
+  set(CMAKE_SKIP_BUILD_RPATH  FALSE)
+
+  # when building, don't use the install RPATH already
+  # (but later on when installing)
+  set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE) # Changed to TRUE by A.O. 
+
+  set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+
+  # add the automatically determined parts of the RPATH
+  # which point to directories outside the build tree to the install RPATH
+  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+  # the RPATH to be used when installing, but only if it's not a system directory
+  list(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_PREFIX}/lib" isSystemDir)
+  if("${isSystemDir}" STREQUAL "-1")
+    set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+  endif("${isSystemDir}" STREQUAL "-1")
+endif()
+
+# Handle special compiler options for MSVS on Windows
+if( MSVC )
+  set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj" )
+endif()
+
+
+# Set the library extension to .pyd on Windows, and force .so for UNIX (including Apple).
+set( PYTHON_LIB_EXTENSION "${CMAKE_SHARED_LIBRARY_SUFFIX}" )
+if (WIN32)
+  set( PYTHON_LIB_EXTENSION ".pyd" )
+else()
+  # NOTE: Even Mac OS X installations of python seem to expect to find ".so" files,
+  # NOT .dylib files, even though they are theoretically the same thing. I don't 
+  # really know why this is, but whatever. 
+  set( PYTHON_LIB_EXTENSION ".so" )
+endif()
+
+#------------------------------------
+# Copy Files and declare BuildStandalone Target
+#------------------------------------
+
+# Create the "dist_build" directory that is used to bundle our stuff together in
+# preparation for the install target.
+#
+get_filename_component( DIST_BUILD_DIR_NAME "${DIST_BUILD_DIR}" NAME )
+add_custom_target( MAKE_DIST_BUILD_DIR
+  COMMAND "${CMAKE_COMMAND}" -E make_directory "${DIST_BUILD_DIR}"
+)
+set_property( DIRECTORY PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${DIST_BUILD_DIR}" )
+
+add_custom_target( CopyFiles )
+
+# Create (forward-declare) the target that will be used to create the standalone XDM executable.
+# Make sure it depends on the files being copied over.
+#
+add_custom_target(  BuildStandalone ALL
+  DEPENDS CopyFiles
+)
+
+#
+# -- copy_files_to_build_dir( TARGET_NAME TOP_LEVEL_DIR FILES_TO_COPY )
+#
+# The TARGET_NAME parameter should be a unique and undeclared target name to assign this
+# copy operation to.
+#
+# This macro will copy the given files over to DIST_BUILD_DIR.
+#
+# The "TOP_LEVEL_DIR" argument specifies the root directory the files should
+# be relative to when they are copied.
+#
+# Example: Suppose we have the following structure:
+# <repository root>/src/python/fileA.py
+# <repository root>/src/python/fileB.py
+#
+# The following cmake code:
+# set( FILES_TO_COPY
+#     src/python/fileA.py 
+#     src/python/fileB.py
+# )
+# copy_files_to_build_dir( CopyA ${CMAKE_CURRENT_SOURCE_DIR} "${FILES_TO_COPY}" )
+#
+# will result in a target called "CopyA" that copies files to the build directory like:
+# <build root>/xdm_bundle/src/python/fileA.py
+# <build root>/xdm_bundle/src/python/fileB.py
+#
+# Alternatively, calling:
+# copy_files_to_build_dir( CopyA "${CMAKE_CURRENT_SOURCE_DIR}/src" "${FILES_TO_COPY}" )
+#
+# will result in a target called "CopyA" that copies files to the build directory like:
+# <build root>/xdm_bundle/python/fileA.py
+# <build root>/xdm_bundle/python/fileB.py
+# 
+macro( copy_files_to_build_dir TARGET_NAME TOP_LEVEL_DIR FILES_TO_COPY) 
+  add_custom_target( "${TARGET_NAME}" )
+  add_dependencies( CopyFiles "${TARGET_NAME}" )
+
+  foreach( FILEPATH ${FILES_TO_COPY} )
+    file( RELATIVE_PATH relpath "${TOP_LEVEL_DIR}" "${FILEPATH}" )
+
+    set( output_file "${DIST_BUILD_DIR}/${relpath}" )
+
+    file( TO_CMAKE_PATH "${relpath}" output_target_path )
+    string( REPLACE "/" "_" output_target "${output_target_path}" )
+    
+    add_custom_command(
+      TARGET "${TARGET_NAME}"
+      COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${FILEPATH}" "${output_file}"
+      DEPENDS "${FILEPATH}" MAKE_DIST_BUILD_DIR
+    )
+  endforeach()
+endmacro()
+
+# Copy the License file over.
+#
+copy_files_to_build_dir( CopyLicenseFile
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/License.txt"
+)
+
+# Copy the XDM Schema files.
+#
+set( XDM_SCHEMA_FILES
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/python/xdm/inout/xml/schema/hspice.xml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/python/xdm/inout/xml/schema/xyce.xml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/python/xdm/inout/xml/schema/spectre.xml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/python/xdm/inout/xml/schema/pspice.xml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/python/xdm/inout/xml/schema/tspice.xml"
+)
+copy_files_to_build_dir( CopySchemaFiles
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/python/xdm/inout/xml/schema"
+  "${XDM_SCHEMA_FILES}"
+)
+
+# Create the actual xdm.py file, since it needs to have the version number
+# properly filled in to be used.
+#
+configure_file(
+  # Input file
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/python/xdm.py.in"
+  # Output file
+  "${DIST_BUILD_DIR}/xdm_bdl.py"
+  # Settings of configuration.
+  IMMEDIATE @ONLY
+)
+
+#------------------------------------
+# Python Macros
+#------------------------------------
+#
+# -- install_python_library( TARGET_NAME )
+#
+# This macro will install a shared library target (created via add_library) and add a 
+# target to install it in a specific directory.c
+#
+# By default, the directory is: ${CMAKE_INSTALL_PREFIX}/python.
+#
+function( install_python_library TARGET_NAME )
+  set( OUTPUT_TARGET "Copy_${TARGET_NAME}_ToBundle" )
+  # Note that we also want to copy this library over to the location where we are
+  # creating our python bundle for PyInstaller (if applicable). This is because we
+  # we cannot 'install' stuff as a pre-requisite to install more stuff with the 
+  # same install target.
+  # We do NOT invoke the 'install' command in CMake for these targets because
+  # they are copied into the bundle, and we will later install the whole bundle
+  # instead.
+  add_custom_target( "${OUTPUT_TARGET}"
+    DEPENDS "${TARGET_NAME}" MAKE_DIST_BUILD_DIR
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:${TARGET_NAME}>" "${DIST_BUILD_DIR}"
+    #COMMENT "Copying ${TARGET_NAME} to ${DIST_BUILD_DIR_NAME} directory."
+  )
+  add_dependencies( CopyFiles "${OUTPUT_TARGET}" )
+
+  set( PYTHON_LIBRARY_LIST "${PYTHON_LIBRARY_LIST}" "${OUTPUT_TARGET}" PARENT_SCOPE )
+endfunction()
+
+# -- set_python_lib( TARGET_NAME )
+#
+# This macro will take a shared library (created via add_library) and update it to be
+# compatible with Python as a loadable module.
+macro( set_python_lib target_name )
+  set_target_properties( "${target_name}" PROPERTIES SUFFIX "${PYTHON_LIB_EXTENSION}" )
+  set_target_properties( "${target_name}" PROPERTIES PREFIX "" )
+  
+  if(MSVC)
+    set_target_properties( "${target_name}" PROPERTIES
+      LINK_FLAGS_RELEASE "/SUBSYSTEM:windows")
+    set_target_properties( "${target_name}"  PROPERTIES
+      LINK_FLAGS_DEBUG "/NODEFAULTLIB:msvcrt")
+  endif()
+  
+  add_dependencies( BuildStandalone "${target_name}" )
+endmacro()
+
+#------------------------------------
+# Code Subdirectories
+#------------------------------------
+add_subdirectory( src/c_boost/xyce )
+add_subdirectory( src/c_boost/xml )
+add_subdirectory( src/c_boost/expr )
+
+# Add all of the python files.
+add_subdirectory( src/python )
+
+#------------------------------------
+# Standalone Executable Stuff
+#------------------------------------
+#
+# These commands are used to generate the xdm_bdl executable using pyinstaller.
+#
+  
+# Make sure to include the system libraries with the installer, if applicable.
+if(WIN32)
+  foreach( SYSTEM_LIB ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS} )
+    # LIB_NAME stores the name without the directory or extension.
+    get_filename_component( LIB_NAME "${SYSTEM_LIB}" NAME_WE )
+    add_custom_target( Copy_${LIB_NAME} )
+    add_custom_command( TARGET Copy_${LIB_NAME}
+      COMMAND ${CMAKE_COMMAND}
+      ARGS -E copy_if_different "${SYSTEM_LIB}" ${DIST_BUILD_DIR}
+    )
+    add_dependencies( CopyFiles Copy_${LIB_NAME} )
+  endforeach()
+endif()
+
+# Create the custom target to run the pyinstaller.
+# The location of the .spec file to use when building the directory.
+set( SPEC_FILE_PATH "${DIST_BUILD_DIR}/xdm.spec" )
+
+# Create the pyinstaller configuration file.
+configure_file( "${PROJECT_SOURCE_DIR}/installer_artifacts/xdm.spec.in"
+  "${SPEC_FILE_PATH}"
+  IMMEDIATE @ONLY
+)
+
+add_custom_command(
+  TARGET BuildStandalone
+  DEPENDS CopyFiles
+#  OUTPUT "${XDM_EXE_PATH}"
+  COMMAND "${PYINSTALLER_PATH}"
+  ARGS "-y" "${SPEC_FILE_PATH}"
+  WORKING_DIRECTORY "${DIST_BUILD_DIR}"
+)
+install( PROGRAMS "${XDM_EXE_PATH}"
+  DESTINATION bin
+  COMPONENT application
+)
+
+#------------------------------------
+# Build Test Cases
+#------------------------------------
+option( BUILD_TESTS "GTests for expression parser." OFF )
+if( BUILD_TESTS )
+  enable_testing()
+  find_package(GTest REQUIRED)
+  add_subdirectory( "${CMAKE_CURRENT_SOURCE_DIR}/tests" )
+endif()
+
+#------------------------------------
+# Installation Details
+#------------------------------------
+#
+# Note that most of the installation parameters are the same among systems, but there
+# are a few platform-specific differences which we address here.
+
+# Make sure to install any required system libraries.
+include( InstallRequiredSystemLibraries )
+
+# Install the Boost python libraries.
+# The library that is copied over will depend on the build type.
+# Remember that for Windows, we need to copy the DLLs, even though the variables
+# BOOST_PYTHON_LIBRARY_* store the path to the import libraries.
+string(TOUPPER ${Boost_PYTHON_VERSION} Boost_PYTHON_VERSION_UPPER)
+if( CMAKE_BUILD_TYPE STREQUAL "Debug" )
+  set( BOOST_LIBS_TO_COPY "${Boost_${Boost_PYTHON_VERSION_UPPER}_LIBRARY_DEBUG}" )
+else()
+  set( BOOST_LIBS_TO_COPY "${Boost_${Boost_PYTHON_VERSION_UPPER}_LIBRARY_RELEASE}" )
+endif()
+foreach( file_i "${BOOST_LIBS_TO_COPY}" )
+  if( WIN32 )
+    get_filename_component( FILE_DIR "${file_i}" DIRECTORY )
+    get_filename_component( FILE_NAME "${file_i}" NAME_WE )
+    set( RESOLVED_LIB "${FILE_DIR}/${FILE_NAME}.dll" )
+  else()
+    get_filename_component( RESOLVED_LIB "${file_i}" REALPATH)
+  endif()
+  add_custom_command( TARGET CopyFiles
+    COMMAND "${CMAKE_COMMAND}"
+    ARGS -E copy_if_different "${RESOLVED_LIB}" "${DIST_BUILD_DIR}"
+    #COMMENT "Copying Boost Python libs to ${DIST_BUILD_DIR_NAME}"
+  )
+endforeach()
+
+install( DIRECTORY "${DIST_BUILD_DIR}"
+  DESTINATION .
+  COMPONENT application 
+  PATTERN "*.pyc" EXCLUDE
+)
+
+# For Windows, add a command to spawn a shell with XDM in the path automatically.
+# This is useful for the shell installers and so forth.
+if( WIN32 )
+  install( PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/installer_artifacts/xdm_console.bat"
+    DESTINATION bin
+    COMPONENT application
+  )
+  
+  # Set the installer properties for this executable, since this is what we want the
+  # user to run when running XDM from the start menu or desktop.
+  set_property( INSTALL "bin/xdm_console.bat"
+    PROPERTY CPACK_DESKTOP_SHORTCUTS "XDM Shell"
+    PROPERTY CPACK_START_MENU_SHORTCUTS "XDM Shell"
+  )
+endif()
+
+# Create the uninstall target.
+configure_file( "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cmake_uninstall.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/cmake/cmake_uninstall.cmake"
+  IMMEDIATE @ONLY
+)
+add_custom_target( uninstall 
+  ${CMAKE_COMMAND} -P "${CMAKE_CURRENT_BINARY_DIR}/cmake/cmake_uninstall.cmake"
+)
+
+#------------------------------------
+# Installer Details
+#------------------------------------
+
+# Common CPack Configuration
+set(CPACK_PACKAGE_NAME "xdm")
+set(CPACK_PACKAGE_VENDOR "Sandia National Laboratories")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Installs the xdm netlist translator")
+set(CPACK_PACKAGE_VERSION_MAJOR "${XDM_MAJOR_VERSION}")
+set(CPACK_PACKAGE_VERSION_MINOR "${XDM_MINOR_VERSION}")
+set(CPACK_PACKAGE_VERSION_PATCH "${XDM_PATCH_VERSION}")
+set(CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "xdm")
+
+# Set the path to the license.
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/License.txt" )
+
+# Add an option to enable the "ZIP" installer. This should be valid on all platforms.
+option( ENABLE_ZIP_INSTALLER "Enable building the Zip archive installer." ON )
+
+if( ENABLE_ZIP_INSTALLER )
+  list( APPEND CPACK_GENERATOR "ZIP" )
+endif()
+
+# More descriptive names for each of the components, and component groups
+set(CPACK_COMPONENT_APPLICATION_DISPLAY_NAME "Application")
+set(CPACK_COMPONENT_APPLICATION_REQUIRED true)
+
+set( CPACK_COMPONENTS_ALL application )
+
+# Set the icon used inside the installer wizard and the icons for the installer and uninstaller.
+set(CPACK_PACKAGE_ICON "${CMAKE_CURRENT_SOURCE_DIR}/installer_artifacts/xdm.ico")
+set(CPACK_PACKAGE_ICON "${CMAKE_CURRENT_SOURCE_DIR}/installer_artifacts/xdm.ico")
+
+if (WIN32)
+  option( ENABLE_WIX_INSTALLER "Enable building the Windows installer through WiX." OFF )
+  option( ENABLE_NSIS_INSTALLER "Enable building the Windows installer through NSIS." OFF )
+
+  # Apparently, there is a bug in NSIS that can't handle UNIX paths (piece of crap!).
+  # So we use this hack, as shown in the CMake example here:
+  # https://cmake.org/Wiki/CMake:Packaging_With_CPack
+  set(CPACK_PACKAGE_ICON "${CMAKE_CURRENT_SOURCE_DIR}/installer_artifacts\\\\xdm.ico")
+
+  if( ENABLE_NSIS_INSTALLER )
+    set( CPACK_NSIS_MODIFY_PATH ON )
+    list( APPEND CPACK_GENERATOR "NSIS" )
+
+    # Apparently, there is a bug in NSIS that can't handle UNIX paths (piece of crap!).
+    # So we use this hack, as shown in the CMake example here:
+    # https://cmake.org/Wiki/CMake:Packaging_With_CPack
+    set(CPACK_NSIS_MUI_ICON "${CMAKE_CURRENT_SOURCE_DIR}/installer_artifacts\\\\xdm.ico")
+    set(CPACK_NSIS_MUI_UNIICON "${CMAKE_CURRENT_SOURCE_DIR}/installer_artifacts\\\\xdm.ico")
+    set(CPACK_NSIS_INSTALLED_ICON_NAME "xdm_bdl.exe")
+    # Set the programs displayed under the Start menu shortcut
+    set(CPACK_NSIS_MENU_LINKS
+      "https://gitlab.sandia.gov/rrlober/xdm_user/wikis/Installed-locations-where-xdm-can-be-run" "XDM Gitlab Help"
+    )
+    # We want the Desktop/Start Menu icon stuff to spawn the console to run XDM from,
+    # since XDM has no "GUI" that would otherwise spawn. We set those parameters here.
+    set(CPACK_NSIS_CREATE_ICONS_EXTRA
+      "CreateShortCut '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\XDM.lnk' '$INSTDIR\\\\bin\\\\xdm_console.bat'")
+    set(CPACK_NSIS_DELETE_ICONS_EXTRA
+      "Delete '$SMPROGRAMS\\\\$START_MENU\\\\XDM.lnk'")
+  endif()
+
+  if( ENABLE_WIX_INSTALLER )
+    # Note that the shortcuts for XDM in the Desktop and Start Menu should be set by
+    # the properties in the xdm_console.bat install file.
+    list( APPEND CPACK_GENERATOR "WIX" )
+    set(CPACK_WIX_PRODUCT_GUID "433C6AA4-6D1B-4EE8-ABF6-68695FBDFF2A")
+    set(CPACK_WIX_UPGRADE_GUID "6B452574-06C9-4D52-AA95-08F78624141A")
+    set(CPACK_WIX_PRODUCT_ICON "${CMAKE_CURRENT_SOURCE_DIR}/installer_artifacts/xdm.ico")
+  endif()
+
+  # For Windows, add in the Visual C++ packages as an optional component.
+  set(CPACK_COMPONENT_VCREDIST_DISPLAY_NAME "Visual C++ Redistributable Packages for Visual Studio 2013")
+  set(CPACK_COMPONENT_VCREDIST_DESCRIPTION "The Visual C++ Redistributable Packages install run-time components that are required to run C++ applications that are built by using Visual Studio 2013.")
+
+  list( APPEND CPACK_COMPONENTS_ALL "vcredist" )
+endif()
+
+# This should always be the last CMake command.
+include( CPack )

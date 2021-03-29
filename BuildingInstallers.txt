@@ -1,0 +1,45 @@
+#
+# Building the Installers for XDM
+#
+# Author: Aaron Gibson (asgibso@sandia.gov)
+#
+
+Note that the Linux/Mac OS X installers are straightforward; the default installer
+for these OS's is just a zip file with the usual Unix directory structure:
+/bin/xdm_bdl
+and some other files for testing.
+
+For Windows, the situation is a bit more complicated. Windows also supports the zip
+installer. However, most users will find it hard to use because xdm_bdl won't be 
+available directly on the path and they often won't know to open their own shell.
+
+To get around this, we have two custom installers: NSIS (Nullsoft installer stuff)
+and Wix (newer Windows installer). By default, these installer types are disabled, 
+but they can be enabled by setting the CMake flag:
+$ cmake -DENABLE_WIX_INSTALLER=ON ...
+and/or
+$ cmake -DENABLE_NSIS_INSTALLER=ON
+
+Note that these installer types must actually be installed first. The Wix installer
+can be downloaded here:
+http://wixtoolset.org/releases/
+
+(I don't provide a link to the NSIS installer, because it isn't a signed package,
+and may be susceptible to malware if you aren't careful; Wix is newer anyway, so I'd
+recomment this approach in general.)
+
+Building the Installer
+---------------------------------------------------
+Building the installer should be as easy as building the "package" target from the
+CMake build directory.
+However, there are some caveats for certain versions. The Wix Installer REQUIRES
+a valid version number to run, and will not allow the X.X.X version numbering used
+for development builds of XDM. This means that you should set the version correctly
+in order to build this installer successfully.
+
+Remember that the version can be set by setting the appropriate CMake properties
+with a command like the following:
+$ cmake -DXDM_MAJOR_VERSION=<number> -DXDM_MINOR_VERSION=<number> -DXDM_PATCH_VERSION=<number>
+
+If all goes well, and you are able to install the package, it will generate a .msi file
+in the CMake build directory.
