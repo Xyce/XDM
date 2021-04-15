@@ -40,7 +40,8 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
         generic_switch;
 
     qi::rule<Iterator, std::vector<netlist_statement_object>()> ac_dir, dc_dir, dcvolt_dir, eom_dir, end_dir, enddata_dir, ends_dir, endl_dir, global_param_dir, global_dir, hb_dir, ic_dir, inc_dir, lib_dir, measure_dir, model_dir,
-        nodeset_dir, op_dir, options_dir, param_dir, preprocess_dir, print_dir, save_dir, sens_dir, step_dir, subckt_dir, temp_dir, tran_dir, four_dir, mor_dir, mpde_dir, lin_dir, data_dir;
+        nodeset_dir, op_dir, options_dir, param_dir, preprocess_dir, print_dir, save_dir, sens_dir, step_dir, subckt_dir, temp_dir, tran_dir, four_dir, mor_dir, mpde_dir, lin_dir, data_dir,
+        if_dir, else_dir, elseif_dir, endif_dir;
 
     qi::rule<Iterator, netlist_statement_object()> AREA_VALUE, TRANSCONDUCTANCE_VALUE, COUPLING_VALUE, FUND_FREQ_VALUE, GAIN_VALUE,
         GENERAL_VALUE, CONTROL_DEV_VALUE, POSNODE, NEGNODE, DRAINNODE, GATENODE, SOURCENODE, ANODE, POSCONTROLNODE,
@@ -62,7 +63,8 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
         control_param_value, subckt_directive_param_value, subckt_device_param_value, points_value, start_freq_value, end_freq_value, nodeset_dir_type, FREQ_VALUE, four_dir_type, FUNC_ARG_VALUE,
         FUNC_NAME_VALUE, FUNC_EXPRESSION, NOOP_VALUE, UIC_VALUE, schedule_param_value, SCHEDULE_TYPE, sweep_param_value, restOfLine, mor_dir_type, mpde_dir_type, no_curly_brace_expression_sym,
         pulse_trans_type, sin_trans_type, exp_trans_type, pwl_trans_type, sffm_trans_type, default_param_name, par_output, lin_dir_type, probe_dir_type, measurement_qualifier,
-        measure_param_name, measure_param_value, variable_expr_or_value, vol_type, cur_type, standalone_param, data_table_name, data_param_name, data_param_value;
+        measure_param_name, measure_param_value, variable_expr_or_value, vol_type, cur_type, standalone_param, data_table_name, data_param_name, data_param_value, if_dir_type, else_dir_type, elseif_dir_type, endif_dir_type,
+        IF_COND;
 
     qi::rule<Iterator, std::string()> identifier, math_expression, math_expression_single_quote_delimiter, math_expression_no_delimiter, composite_math_expression, output_variable_expression,
         simple_v_output_expression, inline_comment_str, comment_str, filename_str, param_with_comma, raw_identifier, no_curly_brace_expression, any, node_identifier, raw_node_identifier,
@@ -93,11 +95,11 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
             ;
 
         identifier =
-            raw_identifier >> *(hold[char_(":") >> raw_identifier])
+            (raw_identifier - (hold[char_("/") >> char_("/")])) >> *(hold[char_(":") >> (raw_identifier - (hold[char_("/") >> char_("/")]))])
             ;
 
         raw_identifier =
-            +(~char_("$:;(){}[],= \t'*/"))
+            +(~char_("$:;(){}[],= \t'*"))
             ;
 
         node_identifier =
@@ -340,15 +342,19 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
             ;
 
         subckt_directive_param_value =
-            (math_expression | node_identifier) [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::SUBCKT_DIRECTIVE_PARAM_VALUE))]
+            node_identifier [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::SUBCKT_DIRECTIVE_PARAM_VALUE))]
             ;
 
         subckt_device_param_value =
-            (math_expression | identifier) [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::SUBCKT_DEVICE_PARAM_VALUE))]
+            node_identifier [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::SUBCKT_DEVICE_PARAM_VALUE))]
             ;
 
         FUNC_EXPRESSION =
             math_expression [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::FUNC_EXPRESSION))]
+            ;
+
+        IF_COND =
+            math_expression [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::CONDITIONAL_STATEMENT))]
             ;
 
         devname =
@@ -856,9 +862,9 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
         // DIRECTIVES ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         directive =
-            ac_dir | data_dir | dcvolt_dir | dc_dir | eom_dir | ends_dir | endl_dir | enddata_dir | end_dir | global_param_dir | global_dir | hb_dir | inc_dir | ic_dir | lib_dir | lin_dir |
-            measure_dir | model_dir | four_dir | nodeset_dir | options_dir | op_dir | preprocess_dir | print_dir | param_dir | save_dir | sens_dir | step_dir | subckt_dir | temp_dir | tran_dir |
-            mor_dir | mpde_dir
+            ac_dir | data_dir | dcvolt_dir | dc_dir | eom_dir | ends_dir | endl_dir | enddata_dir | endif_dir | end_dir | global_param_dir | global_dir | hb_dir | inc_dir | ic_dir | lib_dir |
+            lin_dir | measure_dir | model_dir | four_dir | nodeset_dir | options_dir | op_dir | preprocess_dir | print_dir | param_dir | save_dir | sens_dir | step_dir | subckt_dir | temp_dir |
+            tran_dir | mor_dir | mpde_dir | if_dir | elseif_dir | else_dir
         ;
 
         ac_dir_type =
@@ -896,6 +902,22 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
             hold[+(white_space >> -voltage_type >> -white_space >> -lit("(") >> -white_space >> general_node >> -white_space >> -lit(")") >> -white_space >> -lit("=") >> -white_space >> GENERAL_VALUE)]
             ;
 
+        elseif_dir_type =
+            qi::as_string[no_case[lit(".ELSEIF")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DIRECTIVE_TYPE))]
+            ;
+
+        elseif_dir =
+            elseif_dir_type >> white_space >> IF_COND
+            ;
+
+        else_dir_type =
+            qi::as_string[no_case[lit(".ELSE")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DIRECTIVE_TYPE))]
+            ;
+
+        else_dir =
+            else_dir_type
+            ;
+
         eom_dir_type =
             qi::as_string[no_case[lit(".EOM")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DIRECTIVE_TYPE))]
             ;
@@ -909,8 +931,8 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
             ;
 
         end_dir =
-            end_dir_type.alias();
-        ;
+            end_dir_type.alias()
+            ;
 
         enddata_dir_type =
             qi::as_string[no_case[lit(".ENDDATA")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DIRECTIVE_TYPE))]
@@ -918,6 +940,14 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
 
         enddata_dir =
             enddata_dir_type
+            ;
+
+        endif_dir_type =
+            qi::as_string[no_case[lit(".ENDIF")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DIRECTIVE_TYPE))]
+            ;
+
+        endif_dir =
+            endif_dir_type
             ;
 
         ends_dir_type =
@@ -979,6 +1009,14 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
         ic_dir =
             ic_dir_type_alt | ic_dir_type >>
             hold[+(white_space >> -voltage_type >> -white_space >> -lit("(") >> -white_space >> general_node >> -white_space >> -lit(")") >> -white_space >> -lit("=") >> -white_space >> GENERAL_VALUE)]
+            ;
+
+        if_dir_type =
+            qi::as_string[no_case[lit(".IF")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DIRECTIVE_TYPE))]
+            ;
+
+        if_dir =
+            if_dir_type >> white_space >> IF_COND
             ;
 
         inc_dir_type =

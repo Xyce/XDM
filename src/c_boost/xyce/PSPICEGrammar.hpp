@@ -31,7 +31,8 @@ struct pspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
 {
     qi::rule<Iterator, std::vector<netlist_statement_object>()> aliases_dir, distribution_dir, endaliases_dir, loadbias_dir, mc_dir, noise_dir,
         plot_dir, savebias_dir, stimulus_dir, text_dir, tf_dir, vector_dir, watch_dir, wcase_dir, pspice_start, lib_dir, options_dir, print_dir,
-        probe_dir, temp_dir, tran_dir, directive, probe_64_dir, nodeset_dir, autoconverge_dir;
+        probe_dir, temp_dir, tran_dir, analog_device, directive, probe_64_dir, nodeset_dir, autoconverge_dir, table,
+        current_ctrl_current_src, current_ctrl_voltage_src, voltage_ctrl_current_src, voltage_ctrl_voltage_src;
 
     qi::rule<Iterator, netlist_statement_object()> aliases_dir_type, distribution_dir_type, endaliases_dir_type, loadbias_dir_type, mc_dir_type,
         noise_dir_type, plot_dir_type, savebias_dir_type, stimulus_dir_type, text_dir_type, tf_dir_type, vector_dir_type, watch_dir_type,
@@ -93,9 +94,16 @@ struct pspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
             -base_parser.white_space >> base_parser.identifier >> -base_parser.white_space
             ;
 
+        table =
+            base_parser.table_type >> -base_parser.white_space >> base_parser.expression >> -hold[-base_parser.white_space >> lit("=")] >>
+            +(-base_parser.white_space >> lit("(") >> -hold[-base_parser.white_space >> lit("(")] >> -base_parser.white_space >> base_parser.table_param_value >>
+                    -base_parser.white_space >> -lit(",") >> -base_parser.white_space >> base_parser.table_param_value >> -base_parser.white_space >> -(lit(",") >> -base_parser.white_space) >> lit(")")) >> -hold[-base_parser.white_space >> lit(")")]
+
+            ;
+
         // STARTING POINT ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        pspice_start = (directive >> -(-base_parser.white_space >> base_parser.inline_comment)) | base_parser.netlist_line
+        pspice_start = ((analog_device | directive) >> -(-base_parser.white_space >> base_parser.inline_comment)) | base_parser.netlist_line
             ;
 
         // DIRECTIVES ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -287,6 +295,25 @@ struct pspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
                     -base_parser.white_space >> -lit("[") >> -base_parser.white_space >> base_parser.general_node >> -base_parser.white_space >>
                     -lit("]") >> -base_parser.white_space >> -lit(")")) >> -base_parser.white_space >> -lit("=") >> -base_parser.white_space >>
             base_parser.GENERAL_VALUE]
+            ;
+
+        // ANALOG DEVICES  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+        analog_device =
+            (current_ctrl_voltage_src | voltage_ctrl_current_src | voltage_ctrl_voltage_src)
+            ;
+
+        current_ctrl_voltage_src =
+            hold[base_parser.current_ctrl_voltage_src_dev_type >> -base_parser.devname >> base_parser.white_space >> base_parser.POSNODE >> base_parser.white_space >> base_parser.NEGNODE >> base_parser.white_space >> table]
+            ;
+
+        voltage_ctrl_current_src =
+            hold[base_parser.voltage_ctrl_current_src_dev_type >> -base_parser.devname >> base_parser.white_space >> base_parser.POSNODE >> base_parser.white_space >> base_parser.NEGNODE >> base_parser.white_space >> table]
+            ;
+
+        voltage_ctrl_voltage_src =
+            hold[base_parser.voltage_ctrl_voltage_src_dev_type >> -base_parser.devname >> base_parser.white_space >> base_parser.POSNODE >> base_parser.white_space >> base_parser.NEGNODE >> base_parser.white_space >> table]
             ;
     }
 };

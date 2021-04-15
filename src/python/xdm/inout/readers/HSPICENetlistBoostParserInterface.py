@@ -85,6 +85,13 @@ class HSPICENetlistBoostParserInterface:
         self._filename = filename
         self._language_definition = language_definition
         self._top_level_file = top_level_file
+        self._tnom_defined = False
+        self._tnom_value = "25"
+
+        # Comment out IF statements and any conditional block for it for now
+        self._if_statement = False
+        self._comment_end_of_if_statement = False
+        self._nested_if_statement_count = 0
 
         self._pkg_dict = {}
 
@@ -127,6 +134,18 @@ class HSPICENetlistBoostParserInterface:
         for parsedObject in parsed_object_iter:
             self.convert_next_token(parsedObject, parsed_object_iter, pnl, self._synthesized_pnls, self._pkg_dict)
 
+        # Hack for if statements - comment out line
+        if self._if_statement:
+            pnl.type = "COMMENT"
+            pnl.add_comment(boost_parsed_line.sourceline)
+            logging.warning("In file:\"" + str(os.path.basename(pnl.filename)) + "\" at line:" + str(pnl.linenum) + ". If statement cannot be translated. Continuing.")
+
+        if self._comment_end_of_if_statement:
+            pnl.type = "COMMENT"
+            pnl.add_comment(boost_parsed_line.sourceline)
+            self._comment_end_of_if_statement = False
+            logging.warning("In file:\"" + str(os.path.basename(pnl.filename)) + "\" at line:" + str(pnl.linenum) + ". If statement cannot be translated. Continuing.")
+
         if not silent:
             if boost_parsed_line.error_type == "critical":
                 pnl.error_type = boost_parsed_line.error_type
@@ -159,9 +178,14 @@ class HSPICENetlistBoostParserInterface:
         """
         temper_bool = False
 
+
         if (parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_NAME or parsed_object.types[0] == SpiritCommon.data_model_type.DEFAULT_PARAM_NAME) and (pnl.type == ".OPTION" or pnl.local_type == ".OPTIONS"):
             pnl.type = ".OPTIONS"
             pnl.local_type = ".OPTIONS"
+
+            # GITLAB ISSUE #252: all options now will only appear once, at top netlist
+            if not self._top_level_file:
+                pnl.flag_top_pnl = True
 
             # find the adm option name
             orig_param_name = parsed_object.value.upper()
@@ -177,7 +201,10 @@ class HSPICENetlistBoostParserInterface:
 
             param_name, pkgs = self.hack_packages_bugzilla_2020(param_name.upper(), pkgs)
 
-            if pkgs and param_name.upper() == "TNOM":
+            if pkgs and param_name.upper() in ["TNOM", "SCALE"]:
+                if param_name.upper() == "TNOM":
+                    self._tnom_defined = True
+
                 pnl.name = ""
                 if parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_NAME:
                     param_value_parsed_object = next(parsed_object_iter)
@@ -221,18 +248,55 @@ class HSPICENetlistBoostParserInterface:
                     else:
                         pnl.add_comment(".OPTIONS " + orig_param_name + " " + param_value_parsed_object.value)
 
+
+        elif parsed_object.types[0] == SpiritCommon.data_model_type.DIRECTIVE_NAME and parsed_object.value.upper() == ".IF":
+
+            pnl.type = "COMMENT"
+            pnl.add_comment(parsed_object.value)
+
+            self._if_statement = True
+            self._nested_if_statement_count += 1
+
+
+        elif parsed_object.types[0] == SpiritCommon.data_model_type.DIRECTIVE_NAME and parsed_object.value.upper() == ".ELSEIF":
+
+            pnl.type = "COMMENT"
+            pnl.add_comment(parsed_object.value)
+
+
+        elif parsed_object.types[0] == SpiritCommon.data_model_type.DIRECTIVE_NAME and parsed_object.value.upper() == ".ELSE":
+
+            pnl.type = "COMMENT"
+            pnl.add_comment(parsed_object.value)
+
+
+        elif parsed_object.types[0] == SpiritCommon.data_model_type.DIRECTIVE_NAME and parsed_object.value.upper() == ".ENDIF":
+
+            pnl.type = "COMMENT"
+            pnl.add_comment(parsed_object.value)
+
+            self._nested_if_statement_count -= 1
+            if self._nested_if_statement_count == 0:
+                self._if_statement = False
+                self._comment_end_of_if_statement = True
+
+
         elif parsed_object.types[0] == SpiritCommon.data_model_type.DIRECTIVE_NAME and parsed_object.value.upper() == ".MACRO":
             pnl.type = ".SUBCKT"
+
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.DIRECTIVE_NAME and parsed_object.value.upper() == ".EOM":
             pnl.type = ".ENDS"
 
+
         elif parsed_object.types[0] == SpiritCommon.data_model_type.DIRECTIVE_NAME and parsed_object.value.upper() == ".MEAS":
             pnl.type = ".MEASURE"
+
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.DIRECTIVE_NAME and parsed_object.value.upper() == ".PROBE" or parsed_object.value.upper() == ".PROBE64":
             pnl.type = ".PRINT"
             pnl.add_known_object("TRAN", Types.analysisTypeValue)  # default tran type
+
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.OUTPUT_VARIABLE:
 
@@ -240,6 +304,7 @@ class HSPICENetlistBoostParserInterface:
             output_variable_clean = self.clean_hspice_output_variable(parsed_object.value)
 
             pnl.add_output_variable_value(output_variable_clean)
+
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.MODEL_TYPE and pnl.type == ".MODEL":
 
@@ -259,7 +324,9 @@ class HSPICENetlistBoostParserInterface:
                 pnl_synth.local_type = ".OPTIONS"
                 pnl_synth.add_known_object("PARSER", Types.optionPkgTypeValue)
                 pnl_synth.add_param_value_pair("model_binning", "true")
+                pnl_synth.flag_top_pnl = True
                 synthesized_pnls.append(pnl_synth)
+
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.GENERALNODE and not pnl.type in [".IC", ".DCVOLT", ".NODESET"]:
             output_node = parsed_object.value.replace(".", ":")
@@ -272,6 +339,7 @@ class HSPICENetlistBoostParserInterface:
                 synthesized_pnls.append(pnl_synth)
             else:
                 pnl.add_known_object(output_node, BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]])
+
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.FUNC_NAME_VALUE:
             # For lines with mixed parameter and function statements in HSPICE, separate them out
@@ -308,6 +376,7 @@ class HSPICENetlistBoostParserInterface:
                 processed_value = self.hack_exponentiation_symbol(processed_value)
 
                 pnl.add_known_object(processed_value, BoostParserInterface.boost_xdm_map_dict[func_expression_parsed_object.types[0]])
+
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_NAME:
 
@@ -348,6 +417,7 @@ class HSPICENetlistBoostParserInterface:
 
                 pnl.add_param_value_pair(parsed_object.value.upper(), processed_value)
 
+
         elif parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_VALUE and pnl.params_dict:
             # Same as above, for lines with mixed parameter and function statements in HSPICE, separate them out
             # into different ParsedNetlistLine objects and store it in synthesized pnl 
@@ -372,6 +442,7 @@ class HSPICENetlistBoostParserInterface:
 
                 pnl.params_dict[last_key] = prev_param_value+" "+processed_value
 
+
         elif parsed_object.types[0] == SpiritCommon.data_model_type.COMMENT:
             pnl.type = "COMMENT"
             if parsed_object.value.startswith("//"):
@@ -380,6 +451,7 @@ class HSPICENetlistBoostParserInterface:
             else:
                 pnl.name = parsed_object.value[1:]
                 pnl.add_comment(parsed_object.value[1:])
+
 
         elif parsed_object.types == [SpiritCommon.data_model_type.MODEL_NAME, SpiritCommon.data_model_type.VALUE]:
             lst = []
@@ -431,6 +503,12 @@ class HSPICENetlistBoostParserInterface:
         elif parsed_object.types[0] == SpiritCommon.data_model_type.TRANS_REF_NAME:
             processed_value = self.curly_braces_for_expressions(parsed_object.value)
             pnl.add_transient_value(processed_value)
+
+
+        elif parsed_object.types[0] == SpiritCommon.data_model_type.CONDITIONAL_STATEMENT:
+
+            comment = pnl.params_dict[Types.comment] + parsed_object.value
+            pnl.add_comment(comment)
 
 
         else:
@@ -628,3 +706,11 @@ class HSPICENetlistBoostParserInterface:
         if default_values.get(param):
             return_value = default_values[param]
         return return_value
+
+    @property
+    def tnom_defined(self):
+        return self._tnom_defined
+
+    @property
+    def tnom_value(self):
+        return self._tnom_value

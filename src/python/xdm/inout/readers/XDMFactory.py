@@ -424,62 +424,105 @@ def handle_transient(parsed_netlist_line, reader_state, language_device_type, pr
 
 
 def handle_sweep(parsed_netlist_line, reader_state, language_device_type, props, label, value):
-    if parsed_netlist_line.sweep_param_list:
+    # Check if sweep parameters for analysis is given. If not,
+    # skip
+    if set(parsed_netlist_line.sweep_param_list) == {""}:
+
+        props[Types.sweep] = None
+
+        return 
+
+    # Process SWEEP parameters
+    elif parsed_netlist_line.sweep_param_list:
+
         sweep = SWEEP()
         remaining_list = deque(parsed_netlist_line.sweep_param_list)
+
         if "DEC" in parsed_netlist_line.sweep_param_list:
+
             while len(remaining_list) > 0:
+
                 first_item = remaining_list.popleft()
+
                 if "DEC" == first_item:
+
                     first_item = remaining_list.popleft()
+
                 sweep_var_name = first_item
                 start = remaining_list.popleft()
                 stop = remaining_list.popleft()
                 points = remaining_list.popleft()
                 dec_sweep = DEC_SWEEP(sweep_var_name, start, stop, points)
                 sweep.add_sweep(dec_sweep)
+
         elif "OCT" in parsed_netlist_line.sweep_param_list:
+
             while len(remaining_list) > 0:
+
                 first_item = remaining_list.popleft()
+
                 if "OCT" == first_item:
+
                     first_item = remaining_list.popleft()
+
                 sweep_var_name = first_item
                 start = remaining_list.popleft()
                 stop = remaining_list.popleft()
                 points = remaining_list.popleft()
                 oct_sweep = OCT_SWEEP(sweep_var_name, start, stop, points)
                 sweep.add_sweep(oct_sweep)
+
         elif "LIST" in parsed_netlist_line.sweep_param_list:
+
             keyword_indices = [i for i, x in enumerate(remaining_list) if x == "LIST"]
             beginning_list_indices = [x - 1 for x in keyword_indices]
+
             for i, beginning in enumerate(beginning_list_indices):
+
                 sweep_var_name = remaining_list[beginning]
                 val_list = []
+
                 if (i + 1) == len(beginning_list_indices):
+
                     val_list = list(itertools.islice(remaining_list, (beginning + 2), None))
+
                 else:
+
                     val_list = list(itertools.islice(remaining_list, (beginning + 2), beginning_list_indices[i + 1]))
                 list_sweep = LIST_SWEEP(sweep_var_name, val_list)
                 sweep.add_sweep(list_sweep)
+
         elif "DATA" in parsed_netlist_line.sweep_param_list:
+
             while len(remaining_list) > 0:
+
                 first_item = remaining_list.popleft()
+
                 if "DATA" == first_item:
+
                     first_item = remaining_list.popleft()
+
                 sweep_var_name = first_item
                 data_sweep = DATA_SWEEP(sweep_var_name)
                 sweep.add_sweep(data_sweep)
+
         else:
+
             while len(remaining_list) > 0:
+
                 first_item = remaining_list.popleft()
+
                 if "LIN" == first_item:
+
                     first_item = remaining_list.popleft()
+
                 sweep_var_name = first_item
                 start = remaining_list.popleft()
                 stop = remaining_list.popleft()
                 step = remaining_list.popleft()
                 lin_sweep = LIN_SWEEP(sweep_var_name, start, stop, step)
                 sweep.add_sweep(lin_sweep)
+
         props[Types.sweep] = sweep
 
 
@@ -635,53 +678,98 @@ def handle_ambiguous_references(device, parsed_netlist_line, reader_state, devic
 
     # ambiguity length matches lazy statement length, so match them together in order
     if ambiguity_length == len(parsed_netlist_line.lazy_statements):
+
         for i in range(ambiguity_length):
+
             ambiguity_token_label = ambiguity_token_list[i].value
             lazy_statement_name = list(parsed_netlist_line.lazy_statements.items())[i][0]
+
             if ambiguity_token_label == "modelName":
+
                 parsed_netlist_line.add_known_object(lazy_statement_name, Types.modelName)
+
+            elif ambiguity_token_label == "dcValueValue":
+
+                if Types.transient in device.props:
+                    
+                    if device.props[Types.transient].trans_type == "SIN":
+
+                        device.props[Types.transient].trans_params["I0"] = lazy_statement_name
+
+                else:
+                    
+                    dc = DC(lazy_statement_name)
+                    device.props[Types.dcValue] = dc
+
             else:
+
                 device.add_param(ambiguity_token_label, lazy_statement_name)
+
         # TODO: delete lazy statements
         for key, value in list(parsed_netlist_line.lazy_statements.items()):
+
             del parsed_netlist_line.lazy_statements[key]
+
     # ambiguity length is more than lazy statements, so assign the lazy statements to the device
     elif ambiguity_length > len(parsed_netlist_line.lazy_statements):
 
         # gets all of the possible types from the XML
         xml_possible_types_list = []
+
         for ambiguity_token in ambiguity_token_list:
+
             label = ambiguity_token.value
+
             if label == "model":
+
                 label = Types.modelName
+
             xml_possible_types_list.append(label)
 
         # iterate through the lazy statement dict
         for lazy_statement in parsed_netlist_line.lazy_statements:
+
             ambig_obj = reader_state.scope_index.get_object(lazy_statement)
+
             if isinstance(ambig_obj, MASTER_MODEL):
+
                 # it's a model, so set the model - no other lazy statements to worry about
                 device.model = ambig_obj
+
             else:
+
                 # need to set lazy statement to device, with all possible types from XML list
                 possible_types_list = []
                 possible_string_key = None
+
                 for ambiguity_token in ambiguity_token_list:
+
                     label = ambiguity_token.value
+
                     if label == "modelName":
+
                         label = Types.modelName
+
                     else:
+
                         possible_types_list.append(label)
 
                 for possible_type in parsed_netlist_line.lazy_statements[lazy_statement]:
+
                     if possible_type == Types.value:
+
                         pass
+
                     else:
+
                         possible_types_list.append(generic_map_dict[possible_type])
 
                 if ambig_obj is not None:
+
                     device.set_lazy_statement(ambig_obj, possible_types_list)
+
                 else:
+
                     ambig_obj = reader_state.scope_index.add_lazy_statement(lazy_statement,
                                                                             reader_state.scope_index.uid_index.uid)
                     device.set_lazy_statement(ambig_obj, possible_types_list)
@@ -897,6 +985,7 @@ def build_model(parsed_netlist_line, reader_state, language_definition):
             model.device_version = language_device_type.device_version
             model.device_version_key = language_device_type.device_version_key
             model.inline_comment = parsed_netlist_line.comment
+            model.st_language = language_definition.language
             reader_state.scope_index.add_model(model, reader_state.is_case_insensitive())
             return model
         else:
@@ -960,6 +1049,14 @@ def build_directive(parsed_netlist_line, reader_state, language_definition, lib_
         if directive_type == ".AC" and language_definition.language == "spectre" and props.get(Types.sweepTypeValue) == None:
             props[Types.sweepTypeValue] = "DEC"
             props[Types.pointsValue] = "50"
+
+        # For .DC directives, if it is just for DC operating point analysis command, create comment
+        if directive_type == ".DC" and language_definition.language == "spectre" and props.get(Types.sweep) == None:
+
+            parsed_netlist_line.name = parsed_netlist_line.unused_sweep_params
+            parsed_netlist_line.add_comment(parsed_netlist_line.name)
+            build_comment(parsed_netlist_line, reader_state)
+            return None
 
         # For .GLOBAL directives, the first node listed is considered a ground node. For now,
         # if that is the only node listed (which is indicated by the pnl object having no props), 

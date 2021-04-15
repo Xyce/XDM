@@ -91,101 +91,255 @@ class GenericReaderState(object):
 
         # TODO fix device level keys in XDMFactory.build_device
         pnl.add_param_value_pair("LEVEL", modelDef.device_level)
+
         if modelDef.device_version:
+
             pnl.add_param_value_pair("VERSION", modelDef.device_version)
+
+        pnl.add_param_value_pair("ST_LANG", modelDef.st_language)
 
         pnl.flag_unresolved_device = False
 
         return
+
+    def model_checker(self, m, model_key, scope, pnl, num_nodes):
+        """
+        Checks if modelDef matches current model_key.
+
+        Returns:
+            Boolean
+        """
+
+        modelName = m.name
+
+        if self._case_insensitive:
+
+            modelName = modelName.upper()
+
+        if model_key == modelName:
+
+            if m.device_level_key.startswith("M103"):
+
+                if num_nodes == 4:
+
+                    m.device_level_key = "M103"
+
+                elif num_nodes == 5:
+
+                    m.device_level_key = "M1031"
+
+            modelDef = m
+            pnl.model_def_scope = scope
+            self.set_modelDef(pnl, modelDef)
+
+            if (modelDef, scope) not in self._sc.modelDefs:
+                
+                self._sc.add_modelDef(modelDef, scope)
+
+            return True
+
+        # check if binned model by checking the root part of the name. 
+        # use the first declaration's definition
+        if modelName.startswith(model_key + "."):
+
+            if m.device_level_key.startswith("M103"):
+
+                if num_nodes == 4:
+
+                    m.device_level_key = "M103"
+
+                elif num_nodes == 5:
+
+                    m.device_level_key = "M1031"
+
+            modelDef = m
+            pnl.model_def_scope = scope
+            self.set_modelDef(pnl, modelDef)
+
+            if (modelDef, scope) not in self._sc.modelDefs:
+                
+                self._sc.add_modelDef(modelDef, scope)
+
+            return True
+
+        return False
 
     def resolve_unknown_pnl(self, pnl, language_definition):
 
         # could be resolving model defined after device instantiation
         # could be resolving SUBCKT in spectre -- ambiguous
         model_key = pnl.known_objects["MODEL_NAME"]
+
         if self._case_insensitive:
+
             model_key = model_key.upper()
 
+        # For special case of translating PSP models from HSPICE. 
+        # Translation of model level in Xyce depends on number of nodes
+        num_nodes = 0
+        psp_103_sh_flag = 0
+
+        for key in pnl.known_objects:
+
+            if key.endswith("NODE_NAME"):
+
+                num_nodes += 1
+
         modelDef = ""
-        for key in self._sc.statements:
-            st = self._sc.statements[key]
 
-            if isinstance(st, MASTER_MODEL):
-                for m in st.models:
-                    modelName = m.name
-                    if self._case_insensitive:
-                        modelName = modelName.upper()
-                    if model_key == modelName:
-                        modelDef = m
-                        self.set_modelDef(pnl, modelDef)
-                        return pnl
+        # For performance reasons, start by checking if subckt definition 
+        # has already been previously found for current/parent scopes. 
+        # Only matters for Spectre. 
+        if self._sc.subcktDefs:
 
-                    # check if binned model by checking the root part of the name. 
-                    # use the first declaration's definition
-                    if modelName.startswith(model_key + "."):
-                        modelDef = m
-                        self.set_modelDef(pnl, modelDef)
-                        return pnl
+            for subckt_command in self._sc.subcktDefs:
 
-        # if model definition not found in current scope, check scopes of include files
-        if not modelDef:
-            for scope in self._master_inc_list_scopes:
-                statements = scope.statements
+                if model_key == subckt_command.name:
 
-                for key in statements:
-                    st = statements[key]
-
-                    if isinstance(st, MASTER_MODEL):
-                        for m in st.models:
-                            modelName = m.name
-                            if self._case_insensitive:
-                                modelName = modelName.upper()
-                            if model_key == modelName:
-                                modelDef = m
-                                pnl.model_def_scope = scope
-                                self.set_modelDef(pnl, modelDef)
-                                return pnl
-
-                            # check if binned model by checking the root part of the name. 
-                            # use the first declaration's definition
-                            if modelName.startswith(model_key + "."):
-                                modelDef = m
-                                pnl.model_def_scope = scope
-                                self.set_modelDef(pnl, modelDef)
-                                return pnl
-
-        # for Spectre. first check children to see if subckt definition exists for device
-        for child_scope in self._sc.children:
-            if model_key == child_scope.subckt_command.name:
-                pnl.type = "X"
-                pnl.local_type = "inline subcircuit"
-                pnl.subckt_device_param_list = pnl.unknown_nodes
-                pnl.unknown_nodes = []
-                pnl.add_subckt_device_param_value(model_key)  # mimic Xyce param list
-                pnl.flag_unresolved_device = False
-                return pnl
-
-        # for Spectre. next, check parent's children (aka, subckts in same scope
-        # as current subckt) if subckt definition exists for device 
-        if self._sc.parent is not None:
-            for child_scope in self._sc.parent.children:
-                if model_key == child_scope.subckt_command.name:
                     pnl.type = "X"
                     pnl.local_type = "inline subcircuit"
                     pnl.subckt_device_param_list = pnl.unknown_nodes
                     pnl.unknown_nodes = []
                     pnl.add_subckt_device_param_value(model_key)  # mimic Xyce param list
                     pnl.flag_unresolved_device = False
+
+                    return pnl
+
+        if self._sc.parent is not None:
+
+            if self._sc.parent.subcktDefs:
+
+                for subckt_command in self._sc.parent.subcktDefs:
+
+                    if model_key == subckt_command.name:
+
+                        pnl.type = "X"
+                        pnl.local_type = "inline subcircuit"
+                        pnl.subckt_device_param_list = pnl.unknown_nodes
+                        pnl.unknown_nodes = []
+                        pnl.add_subckt_device_param_value(model_key)  # mimic Xyce param list
+                        pnl.flag_unresolved_device = False
+
+                        return pnl
+
+        # Next, check if model definition has already been previously found
+        # for current/parent scopes. Applies to all simulators
+        if self._sc.modelDefs:
+
+            for m, scope in self._sc.modelDefs:
+
+                found_model = self.model_checker(m, model_key, scope, pnl, num_nodes)
+
+                if found_model:
+                    
+                    return pnl
+
+        # Check if model definition is defined in current scope
+        for key in self._sc.statements:
+
+            st = self._sc.statements[key]
+
+            if isinstance(st, MASTER_MODEL):
+
+                for m in st.models:
+
+                    found_model = self.model_checker(m, model_key, self._sc, pnl, num_nodes)
+
+                    if found_model:
+                        
+                        return pnl
+
+        # if model definition not found in current scope, check scopes of include files
+        if not modelDef:
+
+            for scope in self._master_inc_list_scopes:
+
+                if scope.modelDefs:
+
+                    for m, scope in scope.modelDefs:
+
+                        found_model = self.model_checker(m, model_key, scope, pnl, num_nodes)
+
+                        if found_model:
+                            
+                            return pnl
+
+                statements = scope.statements
+
+                for key in statements:
+
+                    st = statements[key]
+
+                    if isinstance(st, MASTER_MODEL):
+
+                        for m in st.models:
+
+                            found_model = self.model_checker(m, model_key, scope, pnl, num_nodes)
+
+                            if found_model:
+                                
+                                return pnl
+
+        # for Spectre. first check children to see if subckt definition exists for device
+        for child_scope in self._sc.children:
+            
+            # check if scope is a subckt scope. if not, skip
+            if child_scope.subckt_command is None:
+
+                continue
+
+            if model_key == child_scope.subckt_command.name:
+
+                pnl.type = "X"
+                pnl.local_type = "inline subcircuit"
+                pnl.subckt_device_param_list = pnl.unknown_nodes
+                pnl.unknown_nodes = []
+                pnl.add_subckt_device_param_value(model_key)  # mimic Xyce param list
+                pnl.flag_unresolved_device = False
+
+                if child_scope.subckt_command not in self._sc.subcktDefs:
+                    self._sc.add_subcktDef(child_scope.subckt_command)
+
+                return pnl
+
+        # for Spectre. next, check parent's children (aka, subckts in same scope
+        # as current subckt) if subckt definition exists for device 
+        if self._sc.parent is not None:
+
+            for child_scope in self._sc.parent.children:
+            
+                # check if scope is a subckt scope. if not, skip
+                if child_scope.subckt_command is None:
+
+                    continue
+
+                if model_key == child_scope.subckt_command.name:
+
+                    pnl.type = "X"
+                    pnl.local_type = "inline subcircuit"
+                    pnl.subckt_device_param_list = pnl.unknown_nodes
+                    pnl.unknown_nodes = []
+                    pnl.add_subckt_device_param_value(model_key)  # mimic Xyce param list
+                    pnl.flag_unresolved_device = False
+
+                    if child_scope.subckt_command not in self._sc.subcktDefs:
+                        self._sc.add_subcktDef(child_scope.subckt_command)
+
                     return pnl
 
         # pdb.set_trace()
-        if pnl.type != "X" and not "SPECTRE" in language_definition._language:
+        if pnl.type != "X" and not "spectre" in language_definition.language:
+
             logging.warning("Line(s):" + str(pnl.linenum) 
                 + ". Could not resolve unknown device " + model_key + ", model not found in scope. Using default model type.")
 
+            pnl.add_param_value_pair("ST_LANG", language_definition.language)
+
             return pnl
+
         else:
-            raise Exception("Could not resolve unknown device, model not found in scope")
+
+            raise Exception("Line(s):" + str(pnl.linenum) + ". Could not resolve unknown device " + model_key + ", model not found in scope")
 
     def resolve_unknown_source(self, pnl, language_definition):
 

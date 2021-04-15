@@ -617,13 +617,6 @@ class Writer(object):
 
     def combine_options(self, to_version):
         lines_to_add = []
-        if "xyce.xml" in to_version and "hspice" in self.input_language.language:
-            if not "DEVICE" in self._options_list_aggregate:
-                self._options_list_aggregate['DEVICE'] = {}
-            if not "TNOM" in self._options_list_aggregate['DEVICE']:
-                self._options_list_aggregate['DEVICE']['TNOM'] = '25'
-            if not self._options_last_line_num:
-                self._options_last_line_num = 5
         for option_type in self._options_list_aggregate:
             options_directive = Command({}, {}, "GENERATEDOPTIONS", [self._options_last_line_num], -1)
             options_directive.command_type = ".OPTIONS"
@@ -840,23 +833,39 @@ class Writer(object):
 
     def check_params(self, obj, is_model=False):
         device_type = self._output_language.get_device_by_name_level_key(obj.device_level_key)
-        oline = "\n\t\t\t\t\tIn file '%s' (%s %s)\n\t\t\t\t\tAt line number %s, param '%s' does not exist\n\t\t\t\t\tin the target language (%s %s) for device/level '%s'. Continuing and writing param '%s' anyway."
+        oline_model_param = "\n\t\t\t\t\tIn file '%s' (%s)\n\t\t\t\t\tAt line number %s, param '%s' does not exist\n\t\t\t\t\tin the target language (%s) for device/level '%s'. Continuing and writing param '%s' anyway."
+        oline_inst_param = "\n\t\t\t\t\tIn file '%s' (%s)\n\t\t\t\t\tAt line number %s, param '%s' does not exist\n\t\t\t\t\tin the target language (%s) for device/level '%s'. Removing param '%s'."
+        removal_list = []
 
         if is_model:
+
             model_type = device_type.model
+
             for param in obj.params:
+
                 if not model_type.key_params.get(param):
-                    logging.info(oline % (str(os.path.basename(obj.file)), str(self.input_language.language),
-                                          str(self.input_language.version), str(obj.line_num), str(param),
-                                          str(self.output_language.language), str(self.output_language.version),
+
+                    removal_list.append(param)
+                    logging.info(oline_model_param % (str(os.path.basename(obj.file)),
+                                          str(self.input_language.language), str(obj.line_num),
+                                          str(param), str(self.output_language.language),
                                           str(device_type.levelKey), str(param)))
+
         else:
+
             for param in obj.params:
+
                 if not device_type.key_params.get(param):
-                    logging.info(oline % (str(os.path.basename(obj.file)), str(self.input_language.language),
-                                          str(self.input_language.version), str(obj.line_num), str(param),
-                                          str(self.output_language.language), str(self.output_language.version),
+
+                    removal_list.append(param)
+                    logging.info(oline_inst_param % (str(os.path.basename(obj.file)),
+                                          str(self.input_language.language), str(obj.line_num),
+                                          str(param), str(self.output_language.language),
                                           str(device_type.levelKey), str(param)))
+
+            for param in removal_list:
+
+                del obj.params[param]
 
     def build_output_line(self, obj, writer, output_language_get_directive_by_name):
         return_string = ""

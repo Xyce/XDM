@@ -68,7 +68,7 @@ Python 3.8:
 ```
 cmake $HOME/xdm-stack/data-model/data-model \
   -DBoost_NO_BOOST_CMAKE=ON \
-  -DBoost_PYTHON_VERSION:STRING=python3.8
+  -DBoost_PYTHON_VERSION:STRING=python3.8 \
   -DCMAKE_BUILD_TYPE:STRING=Release \
   -DCMAKE_CXX_COMPILER:FILEPATH=`which clang++` \
   -DCMAKE_C_COMPILER:FILEPATH=`which clang` \

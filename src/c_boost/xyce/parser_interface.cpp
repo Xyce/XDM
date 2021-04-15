@@ -94,7 +94,7 @@ NetlistLineReader::close() {
 BOOST_PYTHON_MODULE(SpiritCommon)
 {
     boost::python::class_<ParseObject>("ParseObject")
-        .def_readonly("value", &ParseObject::value)
+        .def_readwrite("value", &ParseObject::value)
         .def_readonly("types", &ParseObject::types)
         ;
 
@@ -188,6 +188,11 @@ BOOST_PYTHON_MODULE(SpiritCommon)
         .value("AC_VALUE", adm_boost_common::AC_VALUE)
         .value("AC_MAG_VALUE", adm_boost_common::AC_MAG_VALUE)
         .value("AC_PHASE_VALUE", adm_boost_common::AC_PHASE_VALUE)
+        .value("DC_SWEEP_DEV", adm_boost_common::DC_SWEEP_DEV)
+        .value("DC_SWEEP_PARAM", adm_boost_common::DC_SWEEP_PARAM)
+        .value("DC_SWEEP_START", adm_boost_common::DC_SWEEP_START)
+        .value("DC_SWEEP_STOP", adm_boost_common::DC_SWEEP_STOP)
+        .value("DC_SWEEP_STEP", adm_boost_common::DC_SWEEP_STEP)
         .value("RESULT_NAME_VALUE", adm_boost_common::RESULT_NAME_VALUE)
         .value("MEASUREMENT_TYPE", adm_boost_common::MEASUREMENT_TYPE)
         .value("LIB_ENTRY", adm_boost_common::LIB_ENTRY)

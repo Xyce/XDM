@@ -133,13 +133,25 @@ class XmlLanguageDefinition(object):
 
     def get_device(self, name, level, version=""):
         if self._device_types.get(name):
+            found_device_level = False
+
             for device_type in self._device_types[name]:
                 if device_type.is_device_level(level):
+                    found_device_level = True
+
                     if version:
                         if device_type.is_device_version(version):
                             return device_type
                     else:
                         return device_type
+
+            # If device with same level found, but not exact version,
+            # check one more time for similar major version number
+            if found_device_level and version:
+                for device_type in self._device_types[name]:
+                    if device_type.is_device_level(level):
+                        if device_type.is_device_base_version(version):
+                            return device_type
         return None
 
     def get_default_definition(self, local_name):

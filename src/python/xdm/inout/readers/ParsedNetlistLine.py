@@ -46,6 +46,7 @@ class ParsedNetlistLine(object):
         self._func_arg_list = []
         self._value_list = []
         self._sweep_param_list = []
+        self._unused_sweep_params = None
         self._schedule_param_list = []
         self._table_param_list = []
         self._poly_param_list = []
@@ -222,6 +223,10 @@ class ParsedNetlistLine(object):
     def known_objects(self):
         return self._known_objects
 
+    @known_objects.setter
+    def known_objects(self, x):
+        self._known_objects = x
+
     @property
     def value_list(self):
         return self._value_list
@@ -229,6 +234,10 @@ class ParsedNetlistLine(object):
     @property
     def sweep_param_list(self):
         return self._sweep_param_list
+
+    @property
+    def unused_sweep_params(self):
+        return self._unused_sweep_params
 
     @property
     def error_type(self):
@@ -331,6 +340,15 @@ class ParsedNetlistLine(object):
 
     def add_comment(self, comment_string):
         self._params_dict[Types.comment] = comment_string
+
+    def add_unused_sweep_params(self, param):
+        if self._unused_sweep_params is None:
+
+            self._unused_sweep_params = param
+
+        else:
+
+            self._unused_sweep_params += " " + param
 
     def add_unknown_node(self, unknown_node):
         self._unknown_nodes.append(unknown_node)

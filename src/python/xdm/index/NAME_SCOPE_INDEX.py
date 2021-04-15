@@ -50,6 +50,8 @@ class NAME_SCOPE_INDEX(MasterIndex):
         self._children = []
         self._parent = parent
         self._statements = {}
+        self._modelDefs = []
+        self._subcktDefs = []
         self._all_statements_in_scope = {}
         # only used in child scopes to define subckt name
         self._subckt_command = subckt_command
@@ -95,6 +97,14 @@ class NAME_SCOPE_INDEX(MasterIndex):
     @property
     def statements(self):
         return self._statements
+
+    @property
+    def modelDefs(self):
+        return self._modelDefs
+
+    @property
+    def subcktDefs(self):
+        return self._subcktDefs
 
     @property
     def all_statements_in_scope(self):
@@ -263,6 +273,29 @@ class NAME_SCOPE_INDEX(MasterIndex):
             self._add_statement(st)
         else:
             raise InvalidTypeException(st.name + " is not of type Ref")
+
+    def add_modelDef(self, modelDef, scope):
+        """
+
+        Adds a previously found modelDef to tracking list, for faster searching.
+
+        Args:
+           modelDef : modelDef to add to scoping
+           scope : scope for which modelDef belongs to
+        """
+
+        self._modelDefs.append( (modelDef, scope) )
+
+    def add_subcktDef(self, subcktDef):
+        """
+
+        Adds a previously found subcktDef to tracking list, for faster searching.
+
+        Args:
+           subcktDef : subcktDef to add to scoping
+        """
+
+        self._subcktDefs.append(subcktDef)
 
     def remove_statement(self, st):
         if st.name in self._statements:

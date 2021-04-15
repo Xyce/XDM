@@ -42,13 +42,14 @@ struct spectre_parser : qi::grammar<Iterator, std::vector<netlist_statement_obje
         ;
 
     qi::rule<Iterator, std::vector<netlist_statement_object>()>
-        bsource, capacitor, device, diode, inductor, mutual_inductor, resistor, mesfet,
+        bsource, capacitor, device, diode, inductor, mutual_inductor, port, resistor, mesfet,
         lossless_trans_line, jfet, gain, cccs, vcvs, vccs, pvcvs, pvccs, vsource, isource,
         unknown_device, model_dir, param_dir, subckt_dir, ends_dir, func_dir, func_expr_dir, include_dir,
         library_dir, endlibrary_dir, modelParameter_dir, section_dir, endsection_dir,
         ac_dir, binned_model_dir, dc_dir, global_dir, tran_dir, save_dir, savestate_dir, sens_dir, if_dir,
         spectrerf_dir, stitch_dir, vector_dir, veriloga_dir, simulator_dir, unsupported_dir,
-        delimiter_open_dir, delimiter_close_dir, source_inst_params, mutual_inductor_inst_params
+        delimiter_open_dir, delimiter_close_dir, source_inst_params, mutual_inductor_inst_params,
+        port_inst_params, dc_inst_params
             ;
 
     qi::rule<Iterator, netlist_statement_object()>
@@ -60,7 +61,7 @@ struct spectre_parser : qi::grammar<Iterator, std::vector<netlist_statement_obje
         param_dir_type, ends_dir_type, func_dir_type, delimiter_open_dir_type,
         delimiter_close_dir_type, capacitor_dev_type, diode_dev_type, inductor_dev_type, mutual_inductor_dev_type,
         resistor_dev_type, subckt_dir_type, param_name, wave_param_name, param_value,
-        subckt_directive_param_value, transient_ref_name, params_set_type,
+        subckt_directive_param_value, transient_ref_name, params_set_type, port_type,
         mesfet_type, lossless_trans_line_type, jfet_type, cccs_type, vcvs_type, vccs_type,
         pvcvs_type, pvccs_type, vsource_type, isource_type, include_type,
         library_type, endlibrary_type, section_type, modelParameter_type,
@@ -86,7 +87,8 @@ struct spectre_parser : qi::grammar<Iterator, std::vector<netlist_statement_obje
         outputParameter_dir_type, designParamVals_dir_type, primitives_dir_type,
         subckts_dir_type, saveOptions_dir_type, line_fragment, lin_sweep_type, dec_sweep_type,
         points_value, start_freq_value, end_freq_value, current_type, voltage_type, 
-        FUNC_ARG_VALUE, FUNC_NAME_VALUE, FUNC_EXPRESSION, IF_COND, abm_expression
+        FUNC_ARG_VALUE, FUNC_NAME_VALUE, FUNC_EXPRESSION, IF_COND, abm_expression,
+        dc_sweep_dev, dc_sweep_param, dc_sweep_start, dc_sweep_stop, dc_sweep_step
             ;
 
     qi::rule<Iterator, std::string()>
@@ -217,8 +219,8 @@ struct spectre_parser : qi::grammar<Iterator, std::vector<netlist_statement_obje
 
         device =
             (bsource | capacitor | resistor | inductor | mutual_inductor | diode |
-             mesfet | jfet | lossless_trans_line | vcvs | vccs | pvcvs | pvccs |
-             vsource | isource | unknown_device)
+             mesfet | jfet | lossless_trans_line | vcvs | vccs | port | pvcvs |
+             pvccs | vsource | isource | unknown_device)
             //            unknown_device
             ;
 
@@ -412,6 +414,26 @@ struct spectre_parser : qi::grammar<Iterator, std::vector<netlist_statement_obje
             qi::as_string[no_case[lit("LIN")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::SWEEP_TYPE))]
             ;
 
+        dc_sweep_dev =
+            identifier [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DC_SWEEP_DEV))]
+            ;
+
+        dc_sweep_param =
+            identifier [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DC_SWEEP_PARAM))]
+            ;
+
+        dc_sweep_start =
+            (math_expression | identifier) [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DC_SWEEP_START))]
+            ;
+
+        dc_sweep_stop =
+            (math_expression | identifier) [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DC_SWEEP_STOP))]
+            ;
+
+        dc_sweep_step =
+            (math_expression | identifier) [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DC_SWEEP_STEP))]
+            ;
+
         model_name =
             identifier [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::MODEL_NAME))]
             ;
@@ -502,16 +524,12 @@ struct spectre_parser : qi::grammar<Iterator, std::vector<netlist_statement_obje
             ;
 
         include_type =
-            qi::as_string[no_case[lit("include")]]
-            [symbol_adder(
-                    _val,
-                    boost::spirit::_1,
-                    vector_of<data_model_type>(adm_boost_common::DIRECTIVE_TYPE))]
+            qi::as_string[no_case[lit("include")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DIRECTIVE_TYPE))]
             ;
 
         filename_str =
-            -char_("\"") >> +char_("a-zA-Z0-9.\\/:-_") >> -char_("\"");
-        ;
+            -char_("\"") >> +char_("a-zA-Z0-9.\\/:_-") >> -char_("\"");
+            ;
 
         filename =
             filename_str [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::FILENAME))]
@@ -1065,8 +1083,17 @@ struct spectre_parser : qi::grammar<Iterator, std::vector<netlist_statement_obje
                         adm_boost_common::DIRECTIVE_TYPE))]
             ;
 
+        dc_inst_params =
+            hold[white_space >> lit("dev") >> -white_space >> lit("=") >> -white_space >> dc_sweep_dev] |
+            hold[white_space >> lit("param") >> -white_space >> lit("=") >> -white_space >> dc_sweep_param] |
+            hold[white_space >> lit("start") >> -white_space >> lit("=") >> -white_space >> dc_sweep_start] |
+            hold[white_space >> lit("stop") >> -white_space >> lit("=") >> -white_space >> dc_sweep_stop] |
+            hold[white_space >> lit("step") >> -white_space >> lit("=") >> -white_space >> dc_sweep_step] |
+            hold[white_space >> param_value_pair]
+            ;
+
         dc_dir =
-            hold[analysis_identifier >> white_space >> dc_dir_type >> white_space >> *(param_value_pair >> -white_space)]
+            hold[analysis_identifier >> white_space >> dc_dir_type >> +(dc_inst_params)]
             ;
 
         dc_value_type =
@@ -1136,6 +1163,10 @@ struct spectre_parser : qi::grammar<Iterator, std::vector<netlist_statement_obje
 
         param_dir =
             param_dir_type >> +(white_space >> param_value_pair >> -lit(","))
+            ;
+
+        port_inst_params =
+            hold[white_space >> param_value_pair]
             ;
 
         source_inst_params =
@@ -1244,6 +1275,14 @@ struct spectre_parser : qi::grammar<Iterator, std::vector<netlist_statement_obje
 
         mutual_inductor =
             hold[devname >> white_space >> mutual_inductor_dev_type >> !identifier >> *(mutual_inductor_inst_params)]
+            ;
+
+        port_type =
+            qi::as_string[no_case[lit("port")]][symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DEVICE_ID))]
+            ;
+
+        port =
+            hold[devname >> -white_space >> "(" >> -white_space >> POSNODE >> white_space >> NEGNODE >> -white_space >> ")" >> white_space >> port_type >> !identifier >> *port_inst_params] 
             ;
 
         resistor_dev_type =

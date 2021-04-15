@@ -9985,6 +9985,30 @@
 
         </device>
 
+        <!-- Port Element (Level 1)-->
+        <device name="port" key="P" level="1" levelKey="P1" version="" versionKey="" default="true">
+            <prop type="node" label="posNodeName"/>
+            <prop type="node" label="negNodeName"/>
+            <prop type="name" label="name"/>
+            <param type="value" label="PORT" labelKey="PORT" value="1" />
+            <param type="value" label="Z0" labelKey="Z0" value="0" />
+            <param type="value" label="AC" labelKey="AC" value="0" />
+            <param type="value" label="DC" labelKey="DC" value="0" />
+            <prop type="transient" label="transient" />
+
+            <writer>
+                <token order="1" ref="append">
+                    <param order="1" ref="string" value="P" />
+                    <param order="2" ref="value" label="name" />
+                </token>
+                <token order="2" ref="value" label="posNodeName"/>
+                <token order="3" ref="value" label="negNodeName"/>
+                <token order="4" ref="portParams" required="false"/>
+                <token order="5" ref="transient" label="transient" required="false"/>
+            </writer>
+
+        </device>
+
         <device name="vsource" key="V" level="1" levelKey="V1" version="" versionKey="" default="true">
             <prop type="controlType" label="voltage" />
             <prop type="node" label="posNodeName" outputAlias="p"/>
@@ -10056,6 +10080,10 @@
                 <token order="9" ref="polyExpression" label="polyExpression" required="false"/>
             </writer>
 
+
+            <ambiguity>
+                <token order="1" type="value" label="dcValueValue" />
+            </ambiguity>
         </device>
 
 
@@ -10130,6 +10158,10 @@
                 <token order="9" ref="polyExpression" label="polyExpression" required="false"/>
             </writer>
 
+
+            <ambiguity>
+                <token order="1" type="value" label="dcValueValue" />
+            </ambiguity>
         </device>
 
 
@@ -10953,6 +10985,7 @@
             <optionPkgTypeValue>
                 <propType label="PARSER" >
                     <prop type="value" label="model_binning" value="false" optional="true"/>
+                    <prop type="value" label="scale" value="1" optional="true"/>
                 </propType>
             </optionPkgTypeValue>
         </nestedProps>

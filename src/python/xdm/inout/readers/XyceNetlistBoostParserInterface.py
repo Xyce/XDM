@@ -45,6 +45,8 @@ class XyceNetlistBoostParserInterface(object):
         self._filename = filename
         self._language_definition = language_definition
         self._top_level_file = top_level_file
+        self._tnom_defined = False
+        self._tnom_value = "27"
 
         if not self.goodfile:
             logging.error("File: " + filename + " was not found. Please locate this file and try again.\n\n\n")
@@ -298,3 +300,11 @@ class XyceNetlistBoostParserInterface(object):
             pnl.add_lazy_statement(parsed_object.value, lst)
 
         return
+
+    @property
+    def tnom_defined(self):
+        return self._tnom_defined
+
+    @property
+    def tnom_value(self):
+        return self._tnom_value

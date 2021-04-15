@@ -22,7 +22,7 @@ message("Build Type: ${CMAKE_BUILD_TYPE}")
 # Process the Version Numbers
 #------------------------------------
 set(XDM_MAJOR_VERSION "2")
-set(XDM_MINOR_VERSION "2")
+set(XDM_MINOR_VERSION "3")
 set(XDM_PATCH_VERSION "0")
 if( NOT XDM_MAJOR_VERSION MATCHES "[0-9]+" )
   set( XDM_MAJOR_VERSION "X" CACHE STRING "The major version number for this build." )

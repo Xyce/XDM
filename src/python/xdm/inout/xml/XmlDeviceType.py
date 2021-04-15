@@ -199,6 +199,11 @@ class XmlDeviceType(object):
     def is_device_version(self, version):
         return self.version == version
 
+    def is_device_base_version(self, version):
+        version_base = version.split(".")[0]
+
+        return self.version.startswith(version_base + ".")
+
     def is_device_version_key(self, version_key):
         return self.versionKey == version_key
 

@@ -49,6 +49,7 @@ class Statement(object):
         self._lazy_statements = {}
         self._amb_types = {}
         self._inline_comment = None
+        self._st_language = None
 
         if isinstance(props, str):
             self._props = OrderedDict()
@@ -138,6 +139,14 @@ class Statement(object):
     @inline_comment.setter
     def inline_comment(self, comment):
         self._inline_comment = comment
+
+    @property
+    def st_language(self):
+        return self._st_language
+
+    @st_language.setter
+    def st_language(self, language):
+        self._st_language = language
 
     @property
     def name(self):

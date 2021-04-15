@@ -24,6 +24,7 @@
 import ntpath
 
 import xdm.inout.readers.XDMFactory as XDMFactory
+from xdm import Types
 from xdm.exceptions import InvalidTypeException
 from xdm.inout.readers.GenericReaderState import GenericReaderState
 from xdm.inout.readers.PSPICENetlistBoostParserInterface import *
@@ -119,6 +120,16 @@ class GenericReader(object):
             self._statement_count += 1
             if self._language_changed:
                 break
+
+        # Add in default TNOM value, if not the same as Xyce's 27C
+        if self._is_top_level_file and not self._grammar.tnom_defined and self._grammar.tnom_value != "27":
+            parsed_netlist_line = ParsedNetlistLine(self._file, [0])
+            parsed_netlist_line.type = ".OPTIONS"
+            parsed_netlist_line.local_type = ".OPTIONS"
+            parsed_netlist_line.add_known_object("DEVICE", Types.optionPkgTypeValue)
+            parsed_netlist_line.add_param_value_pair("TNOM", self._grammar.tnom_value)
+            self._last_line = self.read_line(parsed_netlist_line, self._reader_state, self._top_reader_state,
+                                             self._language_definition, control_device_handling_list, inc_files_and_scopes, lib_files)
 
         # only allows for one simulator statement
         if self._language_changed:
@@ -238,7 +249,11 @@ class GenericReader(object):
                 lib_names = deepcopy(lib_files_aggregated_sects[libfile])
                 logging.info("Parsing Lib File: " + lib_file_name + " sections: " + ",".join(lib_names))
 
-                filename = os.path.join(os.path.dirname(self._file), lib_file_name).replace("'", '').replace('"', '')
+                filename = lib_file_name.replace("'", '').replace('"', '')
+
+                if not os.path.isfile(filename):
+                    filename = os.path.join(os.path.dirname(self._file), filename)
+
                 library_file_reader = GenericReader(filename, self._grammar_type, self._language_definition,
                                                     reader_state=self._reader_state, top_reader_state=self._top_reader_state,
                                                     is_top_level_file=False, tspice_xml=self._tspice_xml, pspice_xml=self._pspice_xml,
@@ -272,15 +287,52 @@ class GenericReader(object):
         parent_scope = self._reader_state.scope_index
         if self._is_top_level_file:
             resolved_pnl_list = []
-            duplicate_pnl_flag = False
             for unknown_pnl, scope in self._reader_state.unknown_pnls.items():
+                duplicate_pnl_flag = False
                 self._reader_state.scope_index = scope
                 # If MODEL_NAME is in known_objects, the unresolved device is an instantiation of
                 # a user declared model, which will be resolved in first branch. The second branch is
                 # for any pnl's that must be written to the top level file. The last branch is 
                 # for Spectre, where the possible unresolved name is a name of a source in a directive
+                language_definition = self._language_definition
+
                 if "MODEL_NAME" in unknown_pnl.known_objects: 
                     resolved_pnl = self._reader_state.resolve_unknown_pnl(unknown_pnl, self._language_definition)
+
+                    # If there was a language change in the file with the model card,
+                    # use that language in resolving the PNL.
+                    if "ST_LANG" in resolved_pnl.params_dict:
+                        st_lang = resolved_pnl.params_dict.pop("ST_LANG")
+
+                        if st_lang == self._language_definition.language:
+                            pass
+
+                        elif st_lang == "hspice":
+                            xml_factory = XmlFactory(self._hspice_xml)
+
+                        elif st_lang == "pspice":
+                            xml_factory = XmlFactory(self._pspice_xml)
+
+                        elif st_lang == "spectre":
+                            xml_factory = XmlFactory(self._spectre_xml)
+
+                        elif st_lang == "tspice":
+                            xml_factory = XmlFactory(self._tspice_xml)
+
+                        elif st_lang == "xyce":
+                            xml_factory = XmlFactory(self._xyce_xml)
+
+                        if st_lang != self._language_definition.language:
+                            xml_factory.read()
+                            language_definition = xml_factory.language_definition
+
+                        if (language_definition.is_case_insensitive() and 
+                            not self._reader_state.is_case_insensitive()):
+                            resolved_pnl.params_dict = OrderedDict((k.upper(), v) 
+                                                                   for k, v in resolved_pnl.params_dict.items())
+                            resolved_pnl.known_objects = {k.upper():v 
+                                                          for k, v in resolved_pnl.known_objects.items()} 
+
                 elif unknown_pnl.flag_top_pnl:
                     resolved_pnl = unknown_pnl
                     resolved_pnl.filename = self._file
@@ -289,26 +341,42 @@ class GenericReader(object):
                     # check if the top level file pnl is a duplicate. skip if it is
                     if resolved_pnl_list:
                         for prev_resolved_pnl in resolved_pnl_list:
+                            match_found_flag = True
+
                             for key in resolved_pnl.params_dict:
-                                if key in prev_resolved_pnl.params_dict:
-                                    duplicate_pnl_flag = True
+                                if not key in prev_resolved_pnl.params_dict:
+                                    match_found_flag = False
                                     break
+
+                                if resolved_pnl.params_dict[key] != prev_resolved_pnl.params_dict[key]:
+                                    match_found_flag = False
+                                    break
+
+                            if not match_found_flag:
+                                continue
 
                             for key in resolved_pnl.known_objects:
-                                if key in prev_resolved_pnl.known_objects:
-                                    duplicate_pnl_flag = True
+                                if not key in prev_resolved_pnl.known_objects:
+                                    match_found_flag = False
                                     break
 
-                            if duplicate_pnl_flag:
+                                if resolved_pnl.known_objects[key] != prev_resolved_pnl.known_objects[key]:
+                                    match_found_flag = False 
+                                    break
+
+                            if match_found_flag:
+                                duplicate_pnl_flag = True
                                 break
 
                     if duplicate_pnl_flag:
                         continue
 
                     resolved_pnl_list.append(deepcopy(resolved_pnl))
+
                 else:
                     resolved_pnl = self._reader_state.resolve_unknown_source(unknown_pnl, self._language_definition)
-                self.read_line(resolved_pnl, self._reader_state, self._top_reader_state, self._language_definition,
+
+                self.read_line(resolved_pnl, self._reader_state, self._top_reader_state, language_definition,
                                control_device_handling_list, inc_files_and_scopes, lib_files)
             self._reader_state.scope_index = parent_scope
 
@@ -499,12 +567,19 @@ class GenericReader(object):
                 ntpath.split(parsed_netlist_line.known_objects[Types.fileNameValue].replace("'", "").replace("\"", ""))[1]
             XDMFactory.build_directive(parsed_netlist_line, reader_state, language_definition, self._lib_sect_list)
         elif parsed_netlist_line.type == ".LIB":
+            # Prepare lib_file name
+            if parsed_netlist_line.known_objects.get(Types.fileNameValue):
+                lib_file = parsed_netlist_line.known_objects[Types.fileNameValue].replace("'", '').replace('"', '')
+
+                if not os.path.isfile(lib_file):
+                    lib_file = os.path.join(os.path.dirname(self._file), lib_file)
+
             # Only parse .LIB statements if they are on the parent scope (the scope that 
             # includes the stuff that actually needs to be simulated). Other .LIB sections
             # are unused sections that aren't called by current simulation. This avoids
             # multiple parsing/writing of same files.
             if parsed_netlist_line.known_objects.get(Types.fileNameValue) and reader_state.scope_index.is_top_parent():
-                lib_file = os.path.join(os.path.dirname(self._file), parsed_netlist_line.known_objects[Types.fileNameValue]).replace("'", '').replace('"', '')
+
                 # if .lib command calls a section within the same file, add it to list of sections to parse 
                 # for the current file. otherwise, add file/section to list of libraries to be parsed later
                 if os.path.normpath(self._file) == os.path.normpath(lib_file):
@@ -512,9 +587,11 @@ class GenericReader(object):
                     child = self._reader_state.scope_index.get_child_scope(parsed_netlist_line.known_objects[Types.libEntry])
                     if not child is None:
                         reader_state.scope_index.retroactive_add_statement(child)
+
                 elif parsed_netlist_line.known_objects.get(Types.libEntry):
                     lib_files.append((parsed_netlist_line.known_objects[Types.fileNameValue],
                                       parsed_netlist_line.known_objects[Types.libEntry]))
+
                 else:
                     lib_files.append((parsed_netlist_line.known_objects[Types.fileNameValue],
                                       parsed_netlist_line.known_objects[Types.fileNameValue]))
@@ -530,7 +607,6 @@ class GenericReader(object):
                 # by a scope outside of the top scope, the file will need to be translated. 
                 # unique files (file cannot be saved more than once) are saved to a tracking list 
                 # (self._lib_files_not_in_scope) to be parsed at the very end.
-                lib_file = os.path.join(os.path.dirname(self._file), parsed_netlist_line.known_objects[Types.fileNameValue]).replace("'", '').replace('"', '')
 
                 # in case a library section may be added in to top scope by a .lib statement later in the file. save
                 # other .lib sects included, for retroactive processing

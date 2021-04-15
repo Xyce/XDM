@@ -44,6 +44,8 @@ class TSPICENetlistBoostParserInterface(object):
         self._filename = filename
         self._language_definition = language_definition
         self._top_level_file = top_level_file
+        self._tnom_defined = False
+        self._tnom_value = "27"
 
         self._pkg_dict = {}
 
@@ -173,3 +175,11 @@ class TSPICENetlistBoostParserInterface(object):
             pnl.add_known_object(adm_type, Types.modelType)
         else:
             XyceNetlistBoostParserInterface.convert_next_token(parsed_object, parsed_object_iter, pnl, synthesized_pnls)
+
+    @property
+    def tnom_defined(self):
+        return self._tnom_defined
+
+    @property
+    def tnom_value(self):
+        return self._tnom_value

@@ -38,7 +38,7 @@ spectre_to_adm_model_type_map = {"resistor": "R", "capacitor": "C", "diode": "D"
                                  "mutual_inductor": "K", "gaas": "Z", "tline": "T", "vcvs": "E", "vccs": "G",
                                  "pvcvs": "E", "pvccs": "G", "vsource": "V", "isource": "I", "jfet": "J", "mos1": "M",
                                  "bsim3v3": "M", "mos902": "M", "bsimsoi": "M", "bsim4": "M", "bsimcmg": "M",
-                                 "model": ".MODEL", "parameters": ".PARAM",
+                                 "model": ".MODEL", "parameters": ".PARAM", "port": "P",
                                  "bjt": "Q", "vbic": "Q",
                                  "subckt": ".SUBCKT", "ends": ".ENDS", "include": ".INCLUDE", "section": ".LIB",
                                  "endsection": ".ENDL", "ac": ".AC", "alter": "alter", "altergroup": "altergroup",
@@ -130,15 +130,26 @@ def convert_si_unit_prefix(in_expression):
 
     # case for number having unit prefix and unit, i.e. 10uH
     if len(in_expression) > 2:
+
         if in_expression[-2].isalpha():
+
             prefix_ind = -2
             pass
 
     if in_expression[prefix_ind] == "M":
+
         out_expression = list(in_expression)
         out_expression[prefix_ind] = "x"
         out_expression = ''.join(out_expression)
+
+    elif in_expression[prefix_ind] == "a":
+
+        out_expression = list(in_expression)
+        out_expression[prefix_ind] = "e-18"
+        out_expression = ''.join(out_expression)
+
     else:
+
         out_expression = in_expression
 
     return out_expression
@@ -250,6 +261,8 @@ class SpectreNetlistBoostParserInterface(object):
         self._filename = filename
         self._language_definition = language_definition
         self._top_level_file = top_level_file
+        self._tnom_defined = False
+        self._tnom_value = "27"
 
         # Flag to indicate delimited block
         self._delimited_block = False
@@ -419,8 +432,8 @@ class SpectreNetlistBoostParserInterface(object):
                     pnl.add_transient_value(pnl.source_params["damp"])
                 else:
                     pnl.add_transient_value("0")
-                if pnl.source_params.get("phase"):
-                    pnl.add_transient_value(pnl.source_params["phase"])
+                if pnl.source_params.get("sinephase"):
+                    pnl.add_transient_value(pnl.source_params["sinephase"])
                 else:
                     pnl.add_transient_value("0")
 
@@ -524,189 +537,299 @@ class SpectreNetlistBoostParserInterface(object):
         temp_bool = False
 
         if parsed_object.types[0] == SpiritCommon.data_model_type.BLOCK_DELIMITER:
+
             if parsed_object.value == "{":
+
                 self._delimited_block = True
 
             else:
                 self._delimited_block = False
 
                 if self._if_statement:
+
                     self._if_statement = False
                     self._comment_end_of_if_statement = True
 
 
         elif self._if_statement:
+
             pnl.type = "COMMENT"
             
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.DIRECTIVE_NAME or parsed_object.types[
             0] == SpiritCommon.data_model_type.DEVICE_TYPE:
+
             if spectre_to_adm_model_type_map.get(parsed_object.value):
+
                 pnl.type = spectre_to_adm_model_type_map[parsed_object.value]
                 pnl.local_type = parsed_object.value
+
             else:
+
                 logging.warning("Possible error. Spectre type not recognized: " + str(parsed_object.value))
 
             # If directive is .GLOBAL, for now get rid of first listed node. This first node is
             # considered a ground node.
             if pnl.type == ".GLOBAL":
+
                 next(parsed_object_iter)
 
             if pnl.type == "if":
+
                 pnl.type = "COMMENT"
                 pnl.add_comment(parsed_object.value)
 
                 self._if_statement = True
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.MODEL_NAME and not pnl.type == ".MODEL":
+
             if spectre_to_adm_model_type_map.get(parsed_object.value):
+
                 pnl.type = spectre_to_adm_model_type_map[parsed_object.value]
                 pnl.local_type = parsed_object.value
+
             else:
+
                 pnl.add_known_object(parsed_object.value, Types.modelName)
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.MODEL_TYPE and pnl.type == ".MODEL":
+
             adm_type = spectre_to_adm_model_type_map.get(parsed_object.value)
 
             # For Spectre, different models aren't distinguished by a "LEVEL" parameter. Instead,
             # it uses a name to distinguish what model is being used (ex., bsimsoi instead of
             # LEVEL=10, or vbic instead of LEVEL=10).
             if adm_type == "M" or adm_type == "Q" or adm_type == "J":
+
                 pnl.add_param_value_pair("LEVEL", parsed_object.value)
 
             if not adm_type:
+
                 adm_type = parsed_object.value
 
 
             # Default to NMOS for type
             if adm_type == "M":
+
                 pnl.add_known_object("NMOS", Types.modelType)
                 pnl.add_param_value_pair("type", "N")
+
             elif adm_type == "J":
+
                 pnl.add_known_object("NJF", Types.modelType)
                 pnl.add_param_value_pair("type", "N")
+
             else:
+
                 pnl.add_known_object(adm_type, Types.modelType)
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.DEVICE_NAME or (
                 parsed_object.types[0] == SpiritCommon.data_model_type.MODEL_NAME and pnl.type == ".MODEL"):
+
             pnl.name = parsed_object.value
 
-        elif parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_NAME and pnl.type == ".DC":
+        elif pnl.type == ".DC":
+
             # .DC and .AC directives need four PARAM_NAME/PARAM_VALUE pairs - a sweep variable name,
             # a start value, a stop value, and a step value
-            sweep_list = ["", "", "", ""]
-            sweep_parsed_object = parsed_object
+            if not pnl.sweep_param_list:
 
-            for i in range(8):
-                if sweep_parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_NAME and sweep_parsed_object.value.lower() in ["dev", "param"]:
-                    sweep_index = 0
-                    if sweep_parsed_object.value.lower() == "dev":
-                        pnl.flag_unresolved_device = True
-                elif sweep_parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_NAME and sweep_parsed_object.value.lower() == "start":
-                    sweep_index = 1
-                elif sweep_parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_NAME and sweep_parsed_object.value.lower() == "stop":
-                    sweep_index = 2
-                elif sweep_parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_NAME and sweep_parsed_object.value.lower() == "step":
-                    sweep_index = 3
+                pnl.add_unused_sweep_params("dc")
+                sweep_list = ["", "", "", ""]
 
-                if sweep_parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_VALUE:
-                    sweep_list[sweep_index] = sweep_parsed_object.value
+                for sweep_item in sweep_list:
 
-                # make sure not to iterate anymore on the last PARAM_VALUE or it will cause problems
-                # with further parsing
-                if i < 7:
-                    sweep_parsed_object = next(parsed_object_iter)
+                    pnl.add_sweep_param_value(sweep_item)
 
-                if not (sweep_parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_VALUE or sweep_parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_NAME):
+            if parsed_object.types[0] == SpiritCommon.data_model_type.DC_SWEEP_DEV:
+                
+                pnl.add_unused_sweep_params("dev=" + parsed_object.value)
+
+                # Only save if dc analysis does not involve a param
+                if not pnl.sweep_param_list[0]:
+                    pnl.sweep_param_list[0] = parsed_object.value
+                    pnl.flag_unresolved_device = True
+
+            elif parsed_object.types[0] == SpiritCommon.data_model_type.DC_SWEEP_PARAM:
+                
+                pnl.add_unused_sweep_params("param=" + parsed_object.value)
+
+                if not parsed_object.value == "dc":
+
+                    # Overwrite dc analysis with dev if it exists, reset unresolved
+                    # device flag to False
+                    pnl.sweep_param_list[0] = parsed_object.value
+                    pnl.flag_unresolved_device = False
+
+            elif parsed_object.types[0] == SpiritCommon.data_model_type.DC_SWEEP_START:
+                
+                pnl.sweep_param_list[1] = parsed_object.value
+
+            elif parsed_object.types[0] == SpiritCommon.data_model_type.DC_SWEEP_STOP:
+                
+                pnl.sweep_param_list[2] = parsed_object.value
+
+            elif parsed_object.types[0] == SpiritCommon.data_model_type.DC_SWEEP_STEP:
+                
+                pnl.sweep_param_list[3] = parsed_object.value
+
+            elif parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_NAME:
+                
+                sweep_param_name = parsed_object.value
+                sweep_parsed_object = next(parsed_object_iter)
+
+                if not sweep_parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_VALUE:
+
                     logging.error(
                         "Line(s):" + str(pnl.linenum) + ". Parser passed wrong token.  Expected PARAM_VALUE.  Got " + str(
                             sweep_parsed_object.types[0]))
                     raise Exception("Next Token is not a PARAM_VALUE.  Something went wrong!")
 
-            for sweep_item in sweep_list:
-                pnl.add_sweep_param_value(sweep_item)
+                sweep_param_value = sweep_parsed_object.value
+                pnl.add_unused_sweep_params(sweep_param_name + "=" + sweep_param_value)
+
+        # For translation of port instance parameters to names recognized internally by XDM
+        elif parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_NAME and pnl.type == "P":
+
+            param_value_parsed_object = next(parsed_object_iter)
+
+            if parsed_object.value == "num":
+
+                pnl.add_param_value_pair("PORT", param_value_parsed_object.value)
+                
+            elif parsed_object.value == "r":
+
+                pnl.add_param_value_pair("Z0", param_value_parsed_object.value)
+                
+            elif parsed_object.value == "mag":
+
+                pnl.add_param_value_pair("AC", param_value_parsed_object.value)
+                
+            elif parsed_object.value == "type":
+
+                pass
+                
+            else:
+
+                pnl.add_param_value_pair(parsed_object.value.upper(), param_value_parsed_object.value)
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.GENERALNODE and not pnl.type in [".IC", ".DCVOLT", ".NODESET"]:
+
             output_node = parsed_object.value
 
             if BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]] in pnl.known_objects and pnl.type == ".GLOBAL":
+
                 pnl_synth = ParsedNetlistLine(pnl.filename, pnl.linenum)
                 pnl_synth.type = ".GLOBAL"
                 pnl_synth.local_type = ".GLOBAL"
                 pnl_synth.add_known_object(output_node, BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]])
                 synthesized_pnls.append(pnl_synth)
+
             else:
+
                 pnl.add_known_object(output_node, BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]])
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_NAME:
+
             # For Spectre, the polarity of the device (ex. NMOS or PMOS, or NPN or PNP) 
             # isn't declared as a separate identifier in the .MODEL statement. Instead, 
             # it is saved as a model parameter called "type". The polarity needs to be
             # extracted and saved in the data model consistent with SPICE parsing
             if pnl.type == ".MODEL" and parsed_object.value.upper() == "TYPE":
+
                 param_value_parsed_object = next(parsed_object_iter)
 
                 if pnl.known_objects.get(Types.modelType).endswith("MOS"):
+
                     pnl.add_known_object(param_value_parsed_object.value.upper()+"MOS", Types.modelType)
+
                 elif pnl.known_objects.get(Types.modelType).endswith("JF"):
+
                     pnl.add_known_object(param_value_parsed_object.value.upper()+"JF", Types.modelType)
+
                 else:
+
                     pnl.add_known_object(param_value_parsed_object.value, Types.modelType)
 
                 pnl.add_param_value_pair(parsed_object.value, param_value_parsed_object.value)
 
             elif pnl.type == ".MODEL" and parsed_object.value.upper() == "VERSION":
+
                 param_value_parsed_object = next(parsed_object_iter)
                 pnl.add_param_value_pair(parsed_object.value.upper(), param_value_parsed_object.value)
 
             elif not parsed_object.value == "wave":
+
                 param_value_parsed_object = next(parsed_object_iter)
 
                 if pnl.type and pnl.type == ".TRAN":
+
                     self.set_tran_param(pnl, parsed_object.value, param_value_parsed_object.value)
 
                 elif pnl.type and pnl.type == "V" or pnl.type == "I":
+
                     processed_value = param_value_parsed_object.value
 
                     # Some source paramters don't need curly braces, such as:
                     # The "type" parameter indicates source type, such as PULSE or PWL.
                     # The "file" parameter indicates the file to be opened.
                     if not parsed_object.value == "type" and not parsed_object.value == "file":
+
                         processed_value, temp_bool, msg = convert_to_xyce(processed_value)
+
                     processed_value = self.hack_ternary_operator(processed_value)
                     pnl.source_params[parsed_object.value] = processed_value
 
                 else:
+
                     if param_value_parsed_object.types[0] != SpiritCommon.data_model_type.PARAM_VALUE:
+
                         raise Exception("Next Token is not a PARAM_VALUE.  Something went wrong!")
 
                     if (parsed_object.value.upper() == "M") and pnl.type not in ['R', 'L', 'C']:
+
                         pnl.m_param = param_value_parsed_object.value
 
                     msg = None
                     # expression = None
                     if param_value_parsed_object.value.startswith('[') and param_value_parsed_object.value.endswith(
                             ']'):
+
                         expression = param_value_parsed_object.value
+
                     elif is_a_number(param_value_parsed_object.value):
+
                         processed_value = param_value_parsed_object.value
                         expression = convert_si_unit_prefix(processed_value)
+
                     else:
+
                         # For parameters that refer to control devices, skip convert_to_xyce
                         # In the future, this will include cccs, etc.
                         processed_value, temp_bool, msg = convert_to_xyce(param_value_parsed_object.value)
                         expression = self.hack_ternary_operator(processed_value)
 
                     if expression:
+
                         pnl.add_param_value_pair(parsed_object.value, expression)
+
                     else:
+
                         pnl.add_param_value_pair(parsed_object.value, param_value_parsed_object.value)
 
                     if msg:
+
                         logging.warning("Error in expression: " + msg + str(parsed_object.value))
 
-        elif parsed_object.types[0] in [SpiritCommon.data_model_type.DC_VALUE_VALUE, SpiritCommon.data_model_type.AC_MAG_VALUE, SpiritCommon.data_model_type.AC_PHASE_VALUE]:
+        elif parsed_object.types[0] == SpiritCommon.data_model_type.DC_VALUE_VALUE:
+
+            processed_value, temp_bool, msg = convert_to_xyce(parsed_object.value)
+            processed_value = self.hack_ternary_operator(processed_value)
+            
+            pnl.add_lazy_statement(processed_value, BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]])
+
+        elif parsed_object.types[0] in [SpiritCommon.data_model_type.AC_MAG_VALUE, SpiritCommon.data_model_type.AC_PHASE_VALUE]:
+
             processed_value, temp_bool, msg = convert_to_xyce(parsed_object.value)
             processed_value = self.hack_ternary_operator(processed_value)
 
@@ -728,13 +851,16 @@ class SpectreNetlistBoostParserInterface(object):
             pnl.add_control_param_value(control_dev_name_obj.value)
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.OUTPUT_VARIABLE:
+
             formatted_output_variable = format_output_variable(parsed_object.value)
             pnl.add_output_variable_value(formatted_output_variable)
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.UNKNOWN_NODE:
+
             pnl.add_unknown_node(parsed_object.value)
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.COMMENT:
+
             # If a comment comes in the middle of a delimited block, synthesize a PNL
             # object for the comment and leave the original PNL unmolested
             if self._delimited_block:
@@ -750,10 +876,13 @@ class SpectreNetlistBoostParserInterface(object):
                 pnl.add_comment(parsed_object.value)
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.LIB_ENTRY and pnl.type and not pnl.type == ".ENDL":
+
             # convert to .lib from .include
             pnl.type = ".LIB"
+            pnl.add_known_object(parsed_object.value, BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]])
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.FUNC_EXPRESSION:
+
             processed_value, temp_bool, msg = convert_to_xyce(parsed_object.value)
             processed_value = self.hack_ternary_operator(processed_value)
 
@@ -763,12 +892,15 @@ class SpectreNetlistBoostParserInterface(object):
             pnl.add_known_object(processed_value, BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]])
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.CONDITIONAL_STATEMENT:
+
             comment = pnl.params_dict[Types.comment] + parsed_object.value
             pnl.add_comment(comment)
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.BINNED_MODEL_NAME:
+
             # create a pnl for model binning option
             if not self._write_model_binning_option:
+
                 pnl_synth = ParsedNetlistLine(pnl.filename, [0])  # what to do with line numbers?
                 pnl_synth.type = ".OPTIONS"
                 pnl_synth.local_type = ".OPTIONS"
@@ -781,6 +913,7 @@ class SpectreNetlistBoostParserInterface(object):
             # if "." already in model name, need to create synthesized pnl for next
             # binned model
             if "." in pnl.name:
+
                 model_name = pnl.name.split(".")[0]
                 pnl_synth = ParsedNetlistLine(pnl.filename, [pnl.linenum[-1]])
                 pnl_synth.type = ".MODEL"
@@ -792,12 +925,15 @@ class SpectreNetlistBoostParserInterface(object):
                 self._modify_synth_pnl = True
                 
             else:
+
                 pnl.name = pnl.name + "." + parsed_object.value
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.VOLTAGE or parsed_object.types[0] == SpiritCommon.data_model_type.CURRENT:
+
             expression_obj = next(parsed_object_iter)
 
             if expression_obj.types[0] != SpiritCommon.data_model_type.EXPRESSION:
+
                 logging.error("Line(s):" + str(
                     pnl.linenum) + ". Parser passed wrong token.  Expected EXPRESSION.  Got " + str(
                     expression_obj.types[0]))
@@ -808,12 +944,19 @@ class SpectreNetlistBoostParserInterface(object):
             pnl.add_known_object(processed_value, Types.expression)
 
             if parsed_object.types[0] == SpiritCommon.data_model_type.VOLTAGE:
+
                 pnl.add_known_object(processed_value, Types.voltage)
 
             if parsed_object.types[0] == SpiritCommon.data_model_type.CURRENT:
+
                 pnl.add_known_object(processed_value, Types.current)
 
         else:
+
+            if is_a_number(parsed_object.value):
+
+                parsed_object.value = convert_si_unit_prefix(parsed_object.value)
+
             XyceNetlistBoostParserInterface.convert_next_token(parsed_object, parsed_object_iter, pnl, synthesized_pnls)
 
         # if "temp" special variable detected, a .GLOBAL_PARAM statement pnl will be synthesized and flagged
@@ -871,3 +1014,11 @@ class SpectreNetlistBoostParserInterface(object):
             return in_expression
 
         return out_expression
+
+    @property
+    def tnom_defined(self):
+        return self._tnom_defined
+
+    @property
+    def tnom_value(self):
+        return self._tnom_value
