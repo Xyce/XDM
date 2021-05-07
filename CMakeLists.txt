@@ -116,7 +116,7 @@ endif()
 # Find Boost (with Boost Python)
 #------------------------------------
 set(Boost_PYTHON_VERSION "python3" CACHE STRING "libboost_<Boost_PYTHON_VERSION><*>.<ext>")
-find_package( Boost 1.58 COMPONENTS ${Boost_PYTHON_VERSION} REQUIRED )
+find_package( Boost 1.53 COMPONENTS ${Boost_PYTHON_VERSION} REQUIRED )
 if( NOT Boost_FOUND ) 
   message(STATUS "Could not find Boost Python installation!")
   message(STATUS "Check 1:")
