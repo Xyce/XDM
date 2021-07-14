@@ -145,6 +145,7 @@ struct NetlistLineReader {
         bool foundEnd = false;
         std::string origCommandLine = "";
         std::string tmpOrigCommandLine = stripInlineCommentString(parsedLine.sourceLine, g);
+        boost::trim_right(tmpOrigCommandLine);
         std::string tmpCommandLine;
         std::vector<std::string> results;
 
