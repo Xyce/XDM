@@ -17,3 +17,4 @@
 
 # ignore build dir
 build/
+cmake-build-debug/
