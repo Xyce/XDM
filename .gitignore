@@ -20,3 +20,8 @@ build/
 
 # ignore CLion builds
 cmake-build-*/
+
+xdm_bdl.egg-info
+*.so
+src/python/xdm_bdl.py
+dist

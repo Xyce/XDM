@@ -35,6 +35,7 @@ import types
 #  from copy import deepcopy
 #  from collections import OrderedDict
 #  from pprint import pformat
+import xdm
 from xdm.errorHandling.CallCount import CallCount
 from xdm.index.DEVICES_INDEX import DEVICES_INDEX
 from xdm.index.SRC_LINE_INDEX import SRC_LINE_INDEX
@@ -120,7 +121,7 @@ def get_value(current_device):
         return 'Unknown'
 
 
-base_path = execDirName
+base_path = os.path.dirname(xdm.__file__)
 xdm_mod_date = str(modification_date(sys.executable))
 
 parser = argparse.ArgumentParser(
@@ -214,12 +215,14 @@ origin_combine_off_dict = {
     'spectre': True
 }
 
+xml_path = os.path.join(os.path.dirname(xdm.inout.xml.__file__), "schema/")
+
 xml_files = {
-    'xyce': os.path.join(base_path, "xyce.xml"),
-    'pspice': os.path.join(base_path, "pspice.xml"),
-    'hspice': os.path.join(base_path, "hspice.xml"),
-    'tspice': os.path.join(base_path, "tspice.xml"),
-    'spectre': os.path.join(base_path, "spectre.xml")
+    'xyce': os.path.join(xml_path, "xyce.xml"),
+    'pspice': os.path.join(xml_path, "pspice.xml"),
+    'hspice': os.path.join(xml_path, "hspice.xml"),
+    'tspice': os.path.join(xml_path, "tspice.xml"),
+    'spectre': os.path.join(xml_path, "spectre.xml")
 }
 
 pspice_xml = xml_files['pspice']
