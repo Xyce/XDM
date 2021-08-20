@@ -868,9 +868,12 @@ def build_device(parsed_netlist_line, reader_state, language_definition):
 
         for unsupported_param in parsed_netlist_line.params_dict:
             if parsed_netlist_line.type != "X":
-                logging.warning("In file:\"" + str(os.path.basename(parsed_netlist_line.filename))
-                                + "\" at Line(s):" + str(
-                    parsed_netlist_line.linenum) + ". Param removed. No param defined internally in XML: " + unsupported_param)
+                ls = (min(parsed_netlist_line.linenum),max(parsed_netlist_line.linenum))
+                logging.warning("file \"" + str(os.path.basename(parsed_netlist_line.filename))
+                                + "\" lines " + str(ls)
+                                + " Device \"" + parsed_netlist_line.name
+                                + "\" param \"" + unsupported_param
+                                + "\" removed, not defined in " + language_device_type.name)
 
         # inline comment
         if parsed_netlist_line.params_dict.get(Types.comment):
@@ -969,8 +972,12 @@ def build_model(parsed_netlist_line, reader_state, language_definition):
                 handle_value(parsed_netlist_line, reader_state, lang_device_model, params, value.label, value.value)
 
             for unsupported_param in parsed_netlist_line.params_dict:
-                logging.warning("In file:\"" + str(os.path.basename(parsed_netlist_line.filename))
-                                + "\" at Line(s):" + str(parsed_netlist_line.linenum) + ". Param removed. No param defined internally in XML: " + unsupported_param)
+                ls = (min(parsed_netlist_line.linenum),max(parsed_netlist_line.linenum))
+                logging.warning("file \"" + str(os.path.basename(parsed_netlist_line.filename))
+                                + "\" lines " + str(ls)
+                                + " model \"" + parsed_netlist_line.name
+                                + "\" param \"" + unsupported_param
+                                + "\" removed, not defined in " + language_device_type.name + language_device_type.level)
 
             # inline comment
             if parsed_netlist_line.params_dict.get(Types.comment):
@@ -1072,9 +1079,12 @@ def build_directive(parsed_netlist_line, reader_state, language_definition, lib_
 
         for unsupported_param in parsed_netlist_line.params_dict:
             if parsed_netlist_line.type != ".SUBCKT":
-                logging.warning("In file:\"" + str(os.path.basename(parsed_netlist_line.filename))
-                                + "\" at Line(s):" + str(
-                    parsed_netlist_line.linenum) + ". Param removed. No param defined internally in XML: " + unsupported_param)
+                ls = (min(parsed_netlist_line.linenum),max(parsed_netlist_line.linenum))
+                logging.warning("file \"" + str(os.path.basename(parsed_netlist_line.filename))
+                                + "\" lines " + str(ls)
+                                + " directive \"" + parsed_netlist_line.name
+                                + "\" param \"" + unsupported_param
+                                + "\" removed, not defined in " + directive_type)
 
         # props[Types.name] = directive_type
 
