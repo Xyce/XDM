@@ -438,41 +438,7 @@ def handle_sweep(parsed_netlist_line, reader_state, language_device_type, props,
         sweep = SWEEP()
         remaining_list = deque(parsed_netlist_line.sweep_param_list)
 
-        if "DEC" in parsed_netlist_line.sweep_param_list:
-
-            while len(remaining_list) > 0:
-
-                first_item = remaining_list.popleft()
-
-                if "DEC" == first_item:
-
-                    first_item = remaining_list.popleft()
-
-                sweep_var_name = first_item
-                start = remaining_list.popleft()
-                stop = remaining_list.popleft()
-                points = remaining_list.popleft()
-                dec_sweep = DEC_SWEEP(sweep_var_name, start, stop, points)
-                sweep.add_sweep(dec_sweep)
-
-        elif "OCT" in parsed_netlist_line.sweep_param_list:
-
-            while len(remaining_list) > 0:
-
-                first_item = remaining_list.popleft()
-
-                if "OCT" == first_item:
-
-                    first_item = remaining_list.popleft()
-
-                sweep_var_name = first_item
-                start = remaining_list.popleft()
-                stop = remaining_list.popleft()
-                points = remaining_list.popleft()
-                oct_sweep = OCT_SWEEP(sweep_var_name, start, stop, points)
-                sweep.add_sweep(oct_sweep)
-
-        elif "LIST" in parsed_netlist_line.sweep_param_list:
+        if "LIST" in map(str.upper, parsed_netlist_line.sweep_param_list):
 
             keyword_indices = [i for i, x in enumerate(remaining_list) if x == "LIST"]
             beginning_list_indices = [x - 1 for x in keyword_indices]
@@ -492,36 +458,54 @@ def handle_sweep(parsed_netlist_line, reader_state, language_device_type, props,
                 list_sweep = LIST_SWEEP(sweep_var_name, val_list)
                 sweep.add_sweep(list_sweep)
 
-        elif "DATA" in parsed_netlist_line.sweep_param_list:
-
-            while len(remaining_list) > 0:
-
-                first_item = remaining_list.popleft()
-
-                if "DATA" == first_item:
-
-                    first_item = remaining_list.popleft()
-
-                sweep_var_name = first_item
-                data_sweep = DATA_SWEEP(sweep_var_name)
-                sweep.add_sweep(data_sweep)
-
         else:
 
             while len(remaining_list) > 0:
 
                 first_item = remaining_list.popleft()
 
-                if "LIN" == first_item:
+                if "DEC" == first_item.upper():
 
                     first_item = remaining_list.popleft()
 
-                sweep_var_name = first_item
-                start = remaining_list.popleft()
-                stop = remaining_list.popleft()
-                step = remaining_list.popleft()
-                lin_sweep = LIN_SWEEP(sweep_var_name, start, stop, step)
-                sweep.add_sweep(lin_sweep)
+                    sweep_var_name = first_item
+                    start = remaining_list.popleft()
+                    stop = remaining_list.popleft()
+                    points = remaining_list.popleft()
+                    dec_sweep = DEC_SWEEP(sweep_var_name, start, stop, points)
+                    sweep.add_sweep(dec_sweep)
+
+                elif "OCT" == first_item.upper():
+
+                    first_item = remaining_list.popleft()
+
+                    sweep_var_name = first_item
+                    start = remaining_list.popleft()
+                    stop = remaining_list.popleft()
+                    points = remaining_list.popleft()
+                    oct_sweep = OCT_SWEEP(sweep_var_name, start, stop, points)
+                    sweep.add_sweep(oct_sweep)
+
+                elif "DATA" == first_item.upper():
+
+                    first_item = remaining_list.popleft()
+
+                    sweep_var_name = first_item
+                    data_sweep = DATA_SWEEP(sweep_var_name)
+                    sweep.add_sweep(data_sweep)
+
+                else:
+
+                    if "LIN" == first_item.upper():
+
+                        first_item = remaining_list.popleft()
+
+                    sweep_var_name = first_item
+                    start = remaining_list.popleft()
+                    stop = remaining_list.popleft()
+                    step = remaining_list.popleft()
+                    lin_sweep = LIN_SWEEP(sweep_var_name, start, stop, step)
+                    sweep.add_sweep(lin_sweep)
 
         props[Types.sweep] = sweep
 

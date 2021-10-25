@@ -26,8 +26,8 @@
 #include <sstream>
 #include <fstream>
 #include <vector>
-#include "rapidxml-1.13/rapidxml.hpp"
-#include "rapidxml-1.13/rapidxml_print.hpp"
+#include "rapidxml.hpp"
+#include "rapidxml_print.hpp"
 
 struct XmlLineReader {
     std::string filename;

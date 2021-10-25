@@ -103,10 +103,6 @@ class Writer(object):
 
         self._cur_line = 1
 
-        # For hack for translation into Xyce special variable TEMP. 
-        # Flags whether the special variable TEMP is used, and what
-        # value to default it to.
-        self._xyce_temper = ""
 
     @property
     def input_language(self):
@@ -244,9 +240,6 @@ class Writer(object):
         elif isinstance(ws, Command):
             lang = self._output_language.get_directive_by_name(ws.command_type)
 
-            # Hack for translating into Xyce special variable TEMP. Flags if the XYCE_TEMPER
-            # needs to be stepped.
-            self._check_special_var_temp(ws, from_version)
 
             if ws.command_type != ".OPTIONS":
                 results = _process_sp(ws, _iaw_sp, _aw_sp, specialvariable=True)
@@ -528,27 +521,6 @@ class Writer(object):
 
         return output_file
 
-    def _check_special_var_temp(self, ws, from_version):
-        """ Checks if substitution for temperature special variable
-            is required.
-
-        Args:
-            ws
-            from_version
-
-        """
-
-        if ws.command_type == ".GLOBAL_PARAM":
-            if "hspice" in from_version and "XYCE_TEMPER" in ws.props['PARAMS_LIST']:
-                self._xyce_temper = ws.props['PARAMS_LIST']["XYCE_TEMPER"]
-                output_file = self._set_output_file(ws, temperature=True)
-
-            elif "spectre" in from_version and "XYCE_temp" in ws.props['PARAMS_LIST']:
-                self._xyce_temper = ws.props['PARAMS_LIST']["XYCE_temp"]
-                output_file = self._set_output_file(ws, temperature=True)
-
-        return
-
     def combine_print(self, to_version):
         for print_aggregate_file in self._output_variable_list_aggregate:
             print_directive = Command({}, {}, "GENERATED", [-1], -1)
@@ -655,22 +627,18 @@ class Writer(object):
 
             # If no temperature present, special variable TEMP is used,  and the output language is Xyce,
             # use special processing for single output .STEP statement
-            if "xyce.xml" in to_version and not self._temperature_list_aggregate[aggregate_file]:
-                sweep_obj = SWEEP()
-                data_sweep = LIN_SWEEP("TEMP", self._xyce_temper, self._xyce_temper, "1")
-                sweep_obj.add_sweep(data_sweep)
-
+            if "xyce.xml" in to_version and len(self._temperature_list_aggregate[aggregate_file]) == 1:
                 directive = Command({}, {}, "GENERATED", [-1], -1)
-                directive.command_type = ".STEP"
-                directive.set_prop(Types.sweep, sweep_obj)
+                directive.command_type = ".TEMP"
+                directive.set_prop(Types.valueList, self._temperature_list_aggregate[aggregate_file])
+                
+                directive_writer = self._directive_writer[".TEMP"]
 
-                directive_writer = self._directive_writer[".STEP"]
-
-                return_string = self.build_output_line(directive, directive_writer, self._output_language.get_directive_by_name(".STEP"))
+                return_string = self.build_output_line(directive, directive_writer, self._output_language.get_directive_by_name(".TEMP"))
 
             # If output language is Xyce and more .TEMP statement present,
             # use special processing for different output (.STEP with a .DATA table)
-            elif "xyce.xml" in to_version and len(self._temperature_list_aggregate[aggregate_file]) > 0:
+            elif "xyce.xml" in to_version and len(self._temperature_list_aggregate[aggregate_file]) > 1:
                 sweep_obj = SWEEP()
                 data_sweep = DATA_SWEEP("XDMgeneratedTable")
                 sweep_obj.add_sweep(data_sweep)
@@ -688,10 +656,7 @@ class Writer(object):
                 directive = Command({}, {}, "GENERATED", [-1], -1)
                 directive.command_type = ".DATA"
 
-                if self._xyce_temper:
-                    directive.set_prop(Types.valueList, ["temp", "XYCE_TEMPER"])
-                else:
-                    directive.set_prop(Types.valueList, ["temp"])
+                directive.set_prop(Types.valueList, ["temp"])
 
                 directive.set_prop(Types.dataTableName, "XDMgeneratedTable")
 
@@ -704,10 +669,7 @@ class Writer(object):
                     directive = DATA({}, "GENERATED", [-1], -1)
 
 
-                    if self._xyce_temper:
-                        directive.set_prop(Types.valueList, [temperature, temperature])
-                    else:
-                        directive.set_prop(Types.valueList, [temperature])
+                    directive.set_prop(Types.valueList, [temperature])
 
                     directive_writer = self._admin_writer["data"].token_list
 

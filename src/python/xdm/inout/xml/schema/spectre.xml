@@ -10947,7 +10947,7 @@
         </inlinecomment>
         <specialvariables>
             <writer>
-                <token order="1" ref="string" value=""/>
+                <token order="1" ref="string" value="temp"/>
                 <token order="2" ref="string" value=""/>
                 <token order="3" ref="string" value=""/>
                 <token order="4" ref="string" value=""/>

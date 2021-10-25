@@ -3,6 +3,11 @@ add_library(SpiritExprCommon SHARED
     hspice_expr_parser_interface.cpp
     spectre_expr_parser_interface.cpp
     )
-target_link_libraries(SpiritExprCommon ${PYTHON_LIBRARY} ${Boost_LIBRARIES})
+target_include_directories(SpiritExprCommon
+    PUBLIC ${Boost_INCLUDE_DIRS} ${Python3_INCLUDE_DIRS}
+    )
+target_link_libraries(SpiritExprCommon
+    PUBLIC ${Boost_LIBRARIES} ${Python3_LIBRARIES}
+    )
 set_python_lib(SpiritExprCommon)
 install_python_library(SpiritExprCommon)

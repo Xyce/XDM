@@ -82,6 +82,7 @@ class PSPICENetlistBoostParserInterface(object):
         self._language_definition = language_definition
         self._top_level_file = top_level_file
         self._tnom_defined = False
+        self._temp_defined = False
         self._tnom_value = "27"
 
         self._pkg_dict = {}
@@ -295,3 +296,7 @@ class PSPICENetlistBoostParserInterface(object):
     @property
     def tnom_value(self):
         return self._tnom_value
+
+    @property
+    def temp_defined(self):
+        return self._temp_defined

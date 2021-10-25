@@ -5,9 +5,10 @@
 # Set the project.
 project(xdm LANGUAGES CXX)
 
-cmake_minimum_required( VERSION 3.12 )
+cmake_minimum_required(VERSION 3.13)
 
-cmake_policy(SET CMP0074 OLD)
+cmake_policy(SET CMP0074 NEW)
+cmake_policy(SET CMP0042 NEW)
 
 # Use C++11
 set( CMAKE_CXX_STANDARD 11 )
@@ -15,14 +16,11 @@ set( CMAKE_CXX_STANDARD 11 )
 # Is this an option?
 set(CMAKE_LEGACY_CYGWIN_WIN32 0)
 
-# Report what kind of build cmake believes we are doing
-message("Build Type: ${CMAKE_BUILD_TYPE}")
-
 #------------------------------------
 # Process the Version Numbers
 #------------------------------------
 set(XDM_MAJOR_VERSION "2")
-set(XDM_MINOR_VERSION "3")
+set(XDM_MINOR_VERSION "4")
 set(XDM_PATCH_VERSION "0")
 if( NOT XDM_MAJOR_VERSION MATCHES "[0-9]+" )
   set( XDM_MAJOR_VERSION "X" CACHE STRING "The major version number for this build." )
@@ -40,8 +38,8 @@ endif()
 set( GIT_COMMIT_HASH "GitHashNotAvailable" )
 find_package(Git)
 if( Git_FOUND )
-  message( "Found git: ${GIT_EXECUTABLE}" )
-  message( "-- Enabling git patch version numbering." )
+  message(STATUS "Found git: ${GIT_EXECUTABLE}" )
+  message(STATUS "Enabling git patch version numbering." )
 
   execute_process(
     COMMAND ${GIT_EXECUTABLE} rev-parse --short --verify HEAD
@@ -68,7 +66,7 @@ if( Git_FOUND )
   )
 endif()
 
-message( "Building Version: ${XDM_MAJOR_VERSION}.${XDM_MINOR_VERSION}.${XDM_PATCH_VERSION}" )
+message(STATUS "Building Version: ${XDM_MAJOR_VERSION}.${XDM_MINOR_VERSION}.${XDM_PATCH_VERSION}" )
 
 # Find Python. 
 # Note that the user can specify their python installation explicitly by setting:
@@ -78,62 +76,38 @@ message( "Building Version: ${XDM_MAJOR_VERSION}.${XDM_MINOR_VERSION}.${XDM_PATC
 #------------------------------------
 # Find Python
 #------------------------------------
-find_package( PythonLibs 3 REQUIRED )
-if( PythonLibs_NOTFOUND )
-  message( ERROR "Could not find Python installation!")
-  message( "To set a specific Python version, set the following CMake variables:")
-  message( " - PYTHON_LIBRARY -> path to libpython" )
-  message( " - PYTHON_INCLUDE_DIR -> path to dir with Python.h file." )
-endif()
-
-# Add the Python include directories to the search path.
-include_directories( "${PYTHON_INCLUDE_DIRS}" )
-
-message("PYTHON Info:" )
-message("  *Includes = ${PYTHON_INCLUDE_DIRS}")
-message("  *Lib = ${PYTHON_LIBRARY}")
+# Provides the CMake variables Python3_VERSION_MAJOR and Python3_VERSION_MINOR
+# used below to find the boost libraries tagged with the python version.
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 
 # Set the directory to copy over all of the (python) build files to.
 set( DIST_BUILD_DIR "${PROJECT_BINARY_DIR}/xdm_bundle" )
 
 # Search for PyInstaller and create the standalone target, if found.
-message( "PYINSTALLER Info: " )
-find_program( PYINSTALLER_PATH NAMES "pyinstaller" )
+find_program(PYINSTALLER_PATH NAMES "pyinstaller")
 if( NOT PYINSTALLER_PATH )
-  message("-- Could NOT find pyinstaller. Will not create standalone executable." )
-  message("-- NOTE: Set PYINSTALLER_PATH to the pyinstaller executable to enable" )
-  message("--       creation of the standalone executable.")
-  message( ERROR "pyinstaller is required for XDM!" )
+  message(NOTICE " Could NOT find pyinstaller. Will not create standalone executable.")
+  message(NOTICE " Option 1: Add -DPYINSTALLER_PATH=<full path to pyinstaller> to CMake command")
+  message(NOTICE " Option 2: Run pyinstaller manually")
+  message(NOTICE " Option 3: Run XDM with the xdm_bdl.py in the build directory.")
 else()
-  message("  *PyInstaller Path = ${PYINSTALLER_PATH}" )
+  message(STATUS "PyInstaller Path = ${PYINSTALLER_PATH}" )
 
   # The custom command to generate the standalone executable should
   # place the result at:
-  set( XDM_EXE_PATH "${DIST_BUILD_DIR}/dist/xdm_bdl${CMAKE_EXECUTABLE_SUFFIX}" )
+  set(XDM_EXE_PATH "${DIST_BUILD_DIR}/dist/xdm_bdl${CMAKE_EXECUTABLE_SUFFIX}")
 endif()
 
 #------------------------------------
 # Find Boost (with Boost Python)
 #------------------------------------
-set(Boost_PYTHON_VERSION "python3" CACHE STRING "libboost_<Boost_PYTHON_VERSION><*>.<ext>")
-find_package( Boost 1.58 COMPONENTS ${Boost_PYTHON_VERSION} REQUIRED )
-if( NOT Boost_FOUND ) 
-  message(STATUS "Could not find Boost Python installation!")
-  message(STATUS "Check 1:")
-  message(STATUS "You might need to set BOOST_ROOT.")
-  message(STATUS "Check 2:")
-  message(STATUS "Please specify Boost_PYTHON_VERSION via CMake.")
-  message(STATUS "Linux example: libboost_<Boost_PYTHON_VERSION>.{so,a}")
-  message(STATUS "Mac example: libboost_<Boost_PYTHON_VERSION>.{dylib,a}")
-  message(STATUS "Windows example: libboost_<Boost_PYTHON_VERSION>.{dll,lib")
-  message(FATAL_ERROR "Exiting...")
-else()
-  include_directories( "${Boost_INCLUDE_DIRS}" )
-  message(STATUS "BOOST Includes = ${Boost_INCLUDE_DIRS}")
-  if(Boost_NO_BOOST_CMAKE)
-    message(STATUS "BOOST Library Path = ${Boost_LIBRARY_DIRS}")
-  endif()
-endif()
+# Don't use the CMake configuration files generated by the Boost build. On
+# windows they don't provide the information needed to copy the boost dll to
+# the xdm_bundle directory during the build.
+find_package(Boost REQUIRED
+  COMPONENTS python${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR}
+  )
+set(Boost_PYTHON_VERSION "PYTHON${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR}")
 
 #------------------------------------
 # Platform-specific Stuff
@@ -356,43 +330,44 @@ add_subdirectory( src/python )
 #
 # These commands are used to generate the xdm_bdl executable using pyinstaller.
 #
-  
-# Make sure to include the system libraries with the installer, if applicable.
-if(WIN32)
-  foreach( SYSTEM_LIB ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS} )
-    # LIB_NAME stores the name without the directory or extension.
-    get_filename_component( LIB_NAME "${SYSTEM_LIB}" NAME_WE )
-    add_custom_target( Copy_${LIB_NAME} )
-    add_custom_command( TARGET Copy_${LIB_NAME}
-      COMMAND ${CMAKE_COMMAND}
-      ARGS -E copy_if_different "${SYSTEM_LIB}" ${DIST_BUILD_DIR}
+if(PYINSTALLER_PATH)  
+  # Make sure to include the system libraries with the installer, if applicable.
+  if(WIN32)
+    foreach( SYSTEM_LIB ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS} )
+      # LIB_NAME stores the name without the directory or extension.
+      get_filename_component( LIB_NAME "${SYSTEM_LIB}" NAME_WE )
+      add_custom_target( Copy_${LIB_NAME} )
+      add_custom_command( TARGET Copy_${LIB_NAME}
+        COMMAND ${CMAKE_COMMAND}
+        ARGS -E copy_if_different "${SYSTEM_LIB}" ${DIST_BUILD_DIR}
+        )
+      add_dependencies( CopyFiles Copy_${LIB_NAME} )
+    endforeach()
+  endif()
+
+  # Create the custom target to run the pyinstaller.
+  # The location of the .spec file to use when building the directory.
+  set( SPEC_FILE_PATH "${DIST_BUILD_DIR}/xdm.spec" )
+
+  # Create the pyinstaller configuration file.
+  configure_file( "${PROJECT_SOURCE_DIR}/installer_artifacts/xdm.spec.in"
+    "${SPEC_FILE_PATH}"
+    IMMEDIATE @ONLY
     )
-    add_dependencies( CopyFiles Copy_${LIB_NAME} )
-  endforeach()
+
+  add_custom_command(
+    TARGET BuildStandalone
+    DEPENDS CopyFiles
+    #  OUTPUT "${XDM_EXE_PATH}"
+    COMMAND "${PYINSTALLER_PATH}"
+    ARGS "-y" "${SPEC_FILE_PATH}"
+    WORKING_DIRECTORY "${DIST_BUILD_DIR}"
+    )
+  install( PROGRAMS "${XDM_EXE_PATH}"
+    DESTINATION bin
+    COMPONENT application
+    )
 endif()
-
-# Create the custom target to run the pyinstaller.
-# The location of the .spec file to use when building the directory.
-set( SPEC_FILE_PATH "${DIST_BUILD_DIR}/xdm.spec" )
-
-# Create the pyinstaller configuration file.
-configure_file( "${PROJECT_SOURCE_DIR}/installer_artifacts/xdm.spec.in"
-  "${SPEC_FILE_PATH}"
-  IMMEDIATE @ONLY
-)
-
-add_custom_command(
-  TARGET BuildStandalone
-  DEPENDS CopyFiles
-#  OUTPUT "${XDM_EXE_PATH}"
-  COMMAND "${PYINSTALLER_PATH}"
-  ARGS "-y" "${SPEC_FILE_PATH}"
-  WORKING_DIRECTORY "${DIST_BUILD_DIR}"
-)
-install( PROGRAMS "${XDM_EXE_PATH}"
-  DESTINATION bin
-  COMPONENT application
-)
 
 #------------------------------------
 # Build Test Cases
@@ -418,11 +393,10 @@ include( InstallRequiredSystemLibraries )
 # The library that is copied over will depend on the build type.
 # Remember that for Windows, we need to copy the DLLs, even though the variables
 # BOOST_PYTHON_LIBRARY_* store the path to the import libraries.
-string(TOUPPER ${Boost_PYTHON_VERSION} Boost_PYTHON_VERSION_UPPER)
 if( CMAKE_BUILD_TYPE STREQUAL "Debug" )
-  set( BOOST_LIBS_TO_COPY "${Boost_${Boost_PYTHON_VERSION_UPPER}_LIBRARY_DEBUG}" )
+  set( BOOST_LIBS_TO_COPY "${Boost_${Boost_PYTHON_VERSION}_LIBRARY_DEBUG}" )
 else()
-  set( BOOST_LIBS_TO_COPY "${Boost_${Boost_PYTHON_VERSION_UPPER}_LIBRARY_RELEASE}" )
+  set( BOOST_LIBS_TO_COPY "${Boost_${Boost_PYTHON_VERSION}_LIBRARY_RELEASE}" )
 endif()
 foreach( file_i "${BOOST_LIBS_TO_COPY}" )
   if( WIN32 )

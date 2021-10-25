@@ -86,7 +86,10 @@ class HSPICENetlistBoostParserInterface:
         self._language_definition = language_definition
         self._top_level_file = top_level_file
         self._tnom_defined = False
+        self._temp_defined = False
         self._tnom_value = "25"
+        self._data_driven = False
+        self._np = -1
 
         # Comment out IF statements and any conditional block for it for now
         self._if_statement = False
@@ -176,7 +179,6 @@ class HSPICENetlistBoostParserInterface:
 
         Many hacks contained here
         """
-        temper_bool = False
 
 
         if (parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_NAME or parsed_object.types[0] == SpiritCommon.data_model_type.DEFAULT_PARAM_NAME) and (pnl.type == ".OPTION" or pnl.local_type == ".OPTIONS"):
@@ -293,6 +295,12 @@ class HSPICENetlistBoostParserInterface:
             pnl.type = ".MEASURE"
 
 
+        elif parsed_object.types[0] == SpiritCommon.data_model_type.DIRECTIVE_NAME and (parsed_object.value.upper() == ".TEMP" or parsed_object.value.upper() == ".TEMPERATURE"):
+            pnl.type = parsed_object.value.upper()
+            pnl.local_type = parsed_object.value.upper()
+            self._temp_defined = True
+
+
         elif parsed_object.types[0] == SpiritCommon.data_model_type.DIRECTIVE_NAME and parsed_object.value.upper() == ".PROBE" or parsed_object.value.upper() == ".PROBE64":
             pnl.type = ".PRINT"
             pnl.add_known_object("TRAN", Types.analysisTypeValue)  # default tran type
@@ -329,16 +337,32 @@ class HSPICENetlistBoostParserInterface:
 
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.GENERALNODE and not pnl.type in [".IC", ".DCVOLT", ".NODESET"]:
-            output_node = parsed_object.value.replace(".", ":")
 
             if BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]] in pnl.known_objects and pnl.type == ".GLOBAL":
                 pnl_synth = ParsedNetlistLine(pnl.filename, pnl.linenum)
                 pnl_synth.type = ".GLOBAL"
                 pnl_synth.local_type = ".GLOBAL"
-                pnl_synth.add_known_object(output_node, BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]])
+                pnl_synth.add_known_object(parsed_object.value, BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]])
                 synthesized_pnls.append(pnl_synth)
             else:
-                pnl.add_known_object(output_node, BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]])
+                pnl.add_known_object(parsed_object.value, BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]])
+
+
+        elif parsed_object.types[0] == SpiritCommon.data_model_type.GENERALNODE and pnl.type in [".IC", ".DCVOLT", ".NODESET"]:
+            if not pnl.initial_conditions_list:
+                initial_condition_dict = {}
+                initial_condition_dict[Types.voltageOrCurrent] = "V"
+                initial_condition_dict[Types.generalNodeName] = parsed_object.value
+                pnl.initial_conditions_list.append(initial_condition_dict)
+                
+            elif Types.generalNodeName in pnl.initial_conditions_list[-1]:
+                initial_condition_dict = {}
+                initial_condition_dict[Types.voltageOrCurrent] = "V"
+                initial_condition_dict[Types.generalNodeName] = parsed_object.value
+                pnl.initial_conditions_list.append(initial_condition_dict)
+
+            else:
+                pnl.initial_conditions_list[-1][Types.generalNodeName] = parsed_object.value
 
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.FUNC_NAME_VALUE:
@@ -355,7 +379,6 @@ class HSPICENetlistBoostParserInterface:
                     func_arg_parsed_object = next(parsed_object_iter)
                 func_expression_parsed_object = func_arg_parsed_object
 
-                temper_bool = self.hack_detect_temper(func_expression_parsed_object.value)
                 processed_value = self.hack_ternary_operator(func_expression_parsed_object.value)
                 processed_value = self.hack_exponentiation_symbol(processed_value)
 
@@ -371,7 +394,6 @@ class HSPICENetlistBoostParserInterface:
                     func_arg_parsed_object = next(parsed_object_iter)
                 func_expression_parsed_object = func_arg_parsed_object
 
-                temper_bool = self.hack_detect_temper(func_expression_parsed_object.value)
                 processed_value = self.hack_ternary_operator(func_expression_parsed_object.value)
                 processed_value = self.hack_exponentiation_symbol(processed_value)
 
@@ -392,7 +414,6 @@ class HSPICENetlistBoostParserInterface:
                 # Same as above, for lines with mixed parameter and function statements in HSPICE, separate them out
                 # into different ParsedNetlistLine objects and store it in synthesized pnl 
                 if synthesized_pnls:
-                    temper_bool = self.hack_detect_temper(param_value_parsed_object.value)
                     processed_value = self.hack_ternary_operator(param_value_parsed_object.value)
                     processed_value = self.hack_exponentiation_symbol(processed_value)
 
@@ -402,14 +423,12 @@ class HSPICENetlistBoostParserInterface:
                     pnl_synth.type = ".PARAM"
                     pnl_synth.local_type = ".PARAM"
 
-                    temper_bool = self.hack_detect_temper(param_value_parsed_object.value)
                     processed_value = self.hack_ternary_operator(param_value_parsed_object.value)
                     processed_value = self.hack_exponentiation_symbol(processed_value)
 
                     pnl_synth.add_param_value_pair(parsed_object.value.upper(), processed_value)
                     synthesized_pnls.append(pnl_synth)
             else:
-                temper_bool = self.hack_detect_temper(param_value_parsed_object.value)
                 processed_value = self.hack_ternary_operator(param_value_parsed_object.value)
                 if pnl.type in [".PARAM", ".SUBCKT", ".MODEL", ".MACRO", ".GLOBAL_PARAM"] or pnl.type in supported_devices:
                     processed_value = self.curly_braces_for_expressions(processed_value)
@@ -425,29 +444,36 @@ class HSPICENetlistBoostParserInterface:
                 last_key = synthesized_pnls[-1].params_dict.keys()[-1]
                 prev_param_value = synthesized_pnls[-1].params_dict[last_key]
 
-                temper_bool = self.hack_detect_temper(parsed_object.value)
                 processed_value = self.hack_ternary_operator(parsed_object.value)
                 processed_value = self.hack_exponentiation_symbol(processed_value)
 
                 synthesized_pnls[-1].params_dict[last_key] = prev_param_value+" "+processed_value
+
             else:
                 last_key = pnl.params_dict.keys()[-1]
                 prev_param_value = pnl.params_dict[last_key]
 
-                temper_bool = self.hack_detect_temper(parsed_object.value)
                 processed_value = self.hack_ternary_operator(parsed_object.value)
+
+
                 if pnl.type in [".PARAM", ".SUBCKT", ".MODEL", ".MACRO", ".GLOBAL_PARAM"] or pnl.type in supported_devices:
                     processed_value = self.curly_braces_for_expressions(processed_value)
+
+
                 processed_value = self.hack_exponentiation_symbol(processed_value)
 
                 pnl.params_dict[last_key] = prev_param_value+" "+processed_value
 
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.COMMENT:
+
             pnl.type = "COMMENT"
+
+
             if parsed_object.value.startswith("//"):
                 pnl.name = parsed_object.value[2:]
                 pnl.add_comment(parsed_object.value[2:])
+
             else:
                 pnl.name = parsed_object.value[1:]
                 pnl.add_comment(parsed_object.value[1:])
@@ -458,21 +484,10 @@ class HSPICENetlistBoostParserInterface:
             for typ in parsed_object.types:
                 lst.append(BoostParserInterface.boost_xdm_map_dict[typ])
 
-            temper_bool = self.hack_detect_temper(parsed_object.value)
             processed_value = self.hack_ternary_operator(parsed_object.value)
             processed_value = self.hack_exponentiation_symbol(processed_value)
 
             pnl.add_lazy_statement(processed_value, lst)
-
-            # for resistors, check if the resistance is an ABM expression involving a voltage
-            # at a node or between two nodes. Change into a B-element if it is.
-            if pnl.type == "R" and self.hack_detect_abm(parsed_object.value):
-                pnl.type = "B"
-                pnl.local_type = "B"
-                processed_value = self.hack_exponentiation_symbol(parsed_object.value.strip("'"))
-                pnl.add_known_object("{V(%s,%s)/(%s)}"%(pnl.known_objects["POS_NODE_NAME"], pnl.known_objects["NEG_NODE_NAME"], processed_value), Types.expression)
-                pnl.add_known_object("{V(%s,%s)/(%s)}"%(pnl.known_objects["POS_NODE_NAME"], pnl.known_objects["NEG_NODE_NAME"], processed_value), Types.current)
-                pnl.lazy_statement = {}
          
 
         elif parsed_object.types[0] in [SpiritCommon.data_model_type.DC_VALUE_VALUE, SpiritCommon.data_model_type.AC_MAG_VALUE, SpiritCommon.data_model_type.AC_PHASE_VALUE]:
@@ -482,6 +497,7 @@ class HSPICENetlistBoostParserInterface:
 
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.DATA_TABLE_NAME:
+
 
             if pnl.type == ".DATA":
                 pnl.add_known_object(parsed_object.value, BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]])
@@ -511,18 +527,39 @@ class HSPICENetlistBoostParserInterface:
             pnl.add_comment(comment)
 
 
+        elif parsed_object.types[0] == SpiritCommon.data_model_type.SWEEP_TYPE and pnl.type == ".DC":
+
+            pnl.sweep_param_list.insert(-1, parsed_object.value)
+            self._data_driven = True
+
+
+        elif parsed_object.types[0] == SpiritCommon.data_model_type.SWEEP_PARAM_VALUE and self._data_driven:
+
+            if self._np < 0:
+                self._np = int(parsed_object.value)
+
+            else:
+                pnl.add_sweep_param_value(parsed_object.value)
+
+                if len(pnl.sweep_param_list) > 3:
+
+                    if pnl.sweep_param_list[-4].upper() == "LIN":
+                        incr = (float(pnl.sweep_param_list[-2]) + float(pnl.sweep_param_list[-1])) / (self._np - 1)
+                        pnl.add_sweep_param_value("%g" % incr)
+
+                        self._data_driven = False
+                        self._np = -1
+
+                    elif pnl.sweep_param_list[-4].upper() in ["DEC", "OCT"]:
+                        pnl.add_sweep_param_value("%s" % self._np)
+
+                        self._data_driven = False
+                        self._np = -1
+
+
         else:
             XyceNetlistBoostParserInterface.convert_next_token(parsed_object, parsed_object_iter, pnl, synthesized_pnls)
 
-        # if "TEMPER" special variable detected, a .GLOBAL_PARAM statement pnl will be synthesized and flagged
-        # to indicate it belongs at the top circuit level
-        if temper_bool:
-            hack_pnl_synth = ParsedNetlistLine(pnl.filename, [0])
-            hack_pnl_synth.type = ".GLOBAL_PARAM"
-            hack_pnl_synth.local_type = ".GLOBAL_PARAM"
-            hack_pnl_synth.add_param_value_pair("XYCE_TEMPER", "25")
-            hack_pnl_synth.flag_top_pnl = True
-            synthesized_pnls.append(hack_pnl_synth)
 
     @staticmethod
     def clean_hspice_output_variable(in_output_variable):
@@ -536,11 +573,8 @@ class HSPICENetlistBoostParserInterface:
         out_output_variable = out_output_variable.replace("IA(", "I1(")
         out_output_variable = out_output_variable.replace("IB(", "I2(")
 
-        # replace "." with ":" when it is not an expression
-        if "'" not in out_output_variable:
-            out_output_variable = out_output_variable.replace(".", ":")
-
         return out_output_variable
+
 
     @staticmethod
     def hack_ternary_operator(in_expression):
@@ -588,6 +622,7 @@ class HSPICENetlistBoostParserInterface:
 
         return out_expression
 
+
     @staticmethod
     def curly_braces_for_expressions(in_expression):
         """
@@ -619,6 +654,7 @@ class HSPICENetlistBoostParserInterface:
 
         return out_expression
 
+
     @staticmethod
     def hack_exponentiation_symbol(in_expression):
         """
@@ -629,48 +665,6 @@ class HSPICENetlistBoostParserInterface:
 
         return out_expression
 
-    @staticmethod
-    def hack_detect_abm(in_expression):
-        """
-        Hack to dectect if an expression contains an ABM expression
-        """
-
-        abm_bool = False
-
-        # split an expression into it's component parts
-        expression_split = re.split("(\*|/|\+|-| |')", in_expression)
-
-        # detects if expression component has dependence on voltage at a node or between nodes.
-        # Nodes are identified by finding identifiers that exclude illegal characters in node 
-        # names for HSPICE
-        abm_expression = re.compile("(V\([^\(\)\,\.\"\'\?\=]+\,[^\(\)\,\.\"\'\?\=]+\)|V\([^\(\)\,\.\"\'\?\=]+\))", re.IGNORECASE)
-        for expression in expression_split:
-            curr_expression = abm_expression.match(expression)
-            if curr_expression:
-                abm_bool = True
-                break
-
-        return abm_bool
-
-    @staticmethod
-    def hack_detect_temper(in_expression):
-        """
-        Hack to dectect if an expression contains the "TEMPER" special variable in HSPICE.
-        If it does, add an unknown pnl to top file scope to add in .GLOBAL_PARAM statement later.
-        """
-
-        temper_bool = False
-
-        # split an expression into it's component parts
-        expression_split = re.split("(\*|/|\+|-|\(|\)| |')", in_expression)
-
-        for expression in expression_split:
-            # detects if expression component contains the "TEMPER" special variable
-            if expression.upper() == "TEMPER":
-                temper_bool = True
-                break
-
-        return temper_bool
 
     @staticmethod
     def hack_packages_bugzilla_2020(param, pkgs):
@@ -714,3 +708,7 @@ class HSPICENetlistBoostParserInterface:
     @property
     def tnom_value(self):
         return self._tnom_value
+
+    @property
+    def temp_defined(self):
+        return self._temp_defined

@@ -1,0 +1,2 @@
+START "xdm" cmd /V /K "pushd C:\Program Files\xdm\platform\win7_64\python && set "PYTHONPATH=C:\Program Files\xdm\platform\win7_64\python;C:\Program Files\xdm\platform\win7_64\bin" && echo PYTHONPATH=!PYTHONPATH! && set "Path=C:\Program Files\xdm\platform\win7_64\bin;C:\Program Files\xdm\platform\win7_64\python;C:\Python27" && echo PATH=!PATH! && set "PYTHONHOME=C:\Python27" && echo PYTHONHOME=!PYTHONHOME!"
+

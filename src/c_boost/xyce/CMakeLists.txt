@@ -1,5 +1,4 @@
-add_library(SpiritCommon
-    SHARED
+add_library(SpiritCommon SHARED
     hspice_parser_interface.cpp
     parser_interface.cpp
     pspice_parser_interface.cpp
@@ -8,10 +7,10 @@ add_library(SpiritCommon
     xyce_parser_interface.cpp
     )
 target_include_directories(SpiritCommon
-    PUBLIC ${Boost_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS}
+    PUBLIC ${Boost_INCLUDE_DIRS} ${Python3_INCLUDE_DIRS}
     )
 target_link_libraries(SpiritCommon
-    PUBLIC ${PYTHON_LIBRARY} ${Boost_LIBRARIES}
+    PUBLIC ${Boost_LIBRARIES} ${Python3_LIBRARIES}
     )
 set_python_lib(SpiritCommon)
 install_python_library(SpiritCommon)

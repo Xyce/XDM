@@ -1,13 +1,12 @@
-#
-# CMakeLists.txt for xml
-#
-
-include_directories( rapidxml )
-
-set( XDM_RAPID_SRC
+add_library(XdmRapidXmlReader SHARED 
     xdm_rapid.cpp
     )
-add_library( XdmRapidXmlReader SHARED ${XDM_RAPID_SRC} )
-target_link_libraries ( XdmRapidXmlReader ${PYTHON_LIBRARY} ${Boost_LIBRARIES} )
+target_include_directories(XdmRapidXmlReader
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/rapidxml/rapidxml-1.13
+    ${Boost_INCLUDE_DIRS} ${Python3_INCLUDE_DIRS}
+    )
+target_link_libraries(XdmRapidXmlReader
+    PUBLIC ${Boost_LIBRARIES} ${Python3_LIBRARIES}
+    )
 set_python_lib( XdmRapidXmlReader )
 install_python_library( XdmRapidXmlReader )

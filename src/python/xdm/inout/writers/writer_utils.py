@@ -606,12 +606,7 @@ def token_conversion(item, target_lang_conflict_dict, source_lang_specials_dict)
                 unsupported_var = item_field
                 return convBool, unsupported_var, conflicting_var, item
 
-            # Dirty hack to deal with "TEMP" in Xyce for now. May be able to remove in the future once
-            # the "TEMP" usage has be clearly delineated
-            if source_lang_specials_dict[item_field_lower] == "temp":
-                converted_item_field = "XYCE_TEMPER"
-            else:
-                converted_item_field = source_lang_specials_dict[item_field_lower]
+            converted_item_field = source_lang_specials_dict[item_field_lower]
 
         converted_item_fields.append(converted_item_field)
 

@@ -131,6 +131,16 @@ class GenericReader(object):
             self._last_line = self.read_line(parsed_netlist_line, self._reader_state, self._top_reader_state,
                                              self._language_definition, control_device_handling_list, inc_files_and_scopes, lib_files)
 
+        # Add in circuit simulation temperature, if source simulator's is not the same as Xyce's 27C
+        if self._is_top_level_file and not self._grammar.temp_defined and self._grammar.tnom_value != "27":
+            parsed_netlist_line = ParsedNetlistLine(self._file, [0])
+            parsed_netlist_line.type = ".OPTIONS"
+            parsed_netlist_line.local_type = ".OPTIONS"
+            parsed_netlist_line.add_known_object("DEVICE", Types.optionPkgTypeValue)
+            parsed_netlist_line.add_param_value_pair("TEMP", self._grammar.tnom_value)
+            self._last_line = self.read_line(parsed_netlist_line, self._reader_state, self._top_reader_state,
+                                             self._language_definition, control_device_handling_list, inc_files_and_scopes, lib_files)
+
         # only allows for one simulator statement
         if self._language_changed:
 

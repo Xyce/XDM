@@ -108,18 +108,6 @@ def is_a_number(in_expression):
     return False
 
 
-def hack_detect_temp(in_expression):
-        """
-        Hack to dectect if an expression contains the "temp" special variable in Spectre.
-        If it does, add an unknown pnl to top file scope to add in .GLOBAL_PARAM statement later.
-        """
-
-        if in_expression == "temp":
-            return True
-        else:
-            return False
-
-
 def convert_si_unit_prefix(in_expression):
     """
     Converts SI unit prefix M (for mega) in Spectre to
@@ -173,13 +161,10 @@ def convert_to_xyce(expression):
     # Only set msg if there's an error
     msg = ""
 
-    # Return flag if special variable temp is detected
-    temp_bool = False
-
     # Skip this whole dirty hack if original input is just a number
     if is_a_number(expression):
         expression = convert_si_unit_prefix(expression)
-        return expression, temp_bool, msg
+        return expression, msg
 
     # Split the expression string by all operators. Examine for validity
     # or conversion to Xyce
@@ -233,8 +218,6 @@ def convert_to_xyce(expression):
         else:
             if is_a_number(token):
                 split[i] = convert_si_unit_prefix(token)
-            else:
-                temp_bool = hack_detect_temp(token)
 
 
 
@@ -245,7 +228,7 @@ def convert_to_xyce(expression):
     if not is_a_number(out_expression):
         out_expression = "{" + out_expression + "}"
 
-    return out_expression, temp_bool, msg
+    return out_expression, msg
 
 
 class SpectreNetlistBoostParserInterface(object):
@@ -262,6 +245,7 @@ class SpectreNetlistBoostParserInterface(object):
         self._language_definition = language_definition
         self._top_level_file = top_level_file
         self._tnom_defined = False
+        self._temp_defined = False
         self._tnom_value = "27"
 
         # Flag to indicate delimited block
@@ -534,8 +518,6 @@ class SpectreNetlistBoostParserInterface(object):
         Many hacks contained here
         """
 
-        temp_bool = False
-
         if parsed_object.types[0] == SpiritCommon.data_model_type.BLOCK_DELIMITER:
 
             if parsed_object.value == "{":
@@ -775,7 +757,7 @@ class SpectreNetlistBoostParserInterface(object):
                     # The "file" parameter indicates the file to be opened.
                     if not parsed_object.value == "type" and not parsed_object.value == "file":
 
-                        processed_value, temp_bool, msg = convert_to_xyce(processed_value)
+                        processed_value, msg = convert_to_xyce(processed_value)
 
                     processed_value = self.hack_ternary_operator(processed_value)
                     pnl.source_params[parsed_object.value] = processed_value
@@ -806,7 +788,7 @@ class SpectreNetlistBoostParserInterface(object):
 
                         # For parameters that refer to control devices, skip convert_to_xyce
                         # In the future, this will include cccs, etc.
-                        processed_value, temp_bool, msg = convert_to_xyce(param_value_parsed_object.value)
+                        processed_value, msg = convert_to_xyce(param_value_parsed_object.value)
                         expression = self.hack_ternary_operator(processed_value)
 
                     if expression:
@@ -823,14 +805,14 @@ class SpectreNetlistBoostParserInterface(object):
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.DC_VALUE_VALUE:
 
-            processed_value, temp_bool, msg = convert_to_xyce(parsed_object.value)
+            processed_value, msg = convert_to_xyce(parsed_object.value)
             processed_value = self.hack_ternary_operator(processed_value)
             
             pnl.add_lazy_statement(processed_value, BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]])
 
         elif parsed_object.types[0] in [SpiritCommon.data_model_type.AC_MAG_VALUE, SpiritCommon.data_model_type.AC_PHASE_VALUE]:
 
-            processed_value, temp_bool, msg = convert_to_xyce(parsed_object.value)
+            processed_value, msg = convert_to_xyce(parsed_object.value)
             processed_value = self.hack_ternary_operator(processed_value)
 
             if parsed_object.types[0] == SpiritCommon.data_model_type.AC_MAG_VALUE:
@@ -883,7 +865,7 @@ class SpectreNetlistBoostParserInterface(object):
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.FUNC_EXPRESSION:
 
-            processed_value, temp_bool, msg = convert_to_xyce(parsed_object.value)
+            processed_value, msg = convert_to_xyce(parsed_object.value)
             processed_value = self.hack_ternary_operator(processed_value)
 
             if not processed_value.startswith("{"):
@@ -939,7 +921,7 @@ class SpectreNetlistBoostParserInterface(object):
                     expression_obj.types[0]))
                 raise Exception("Next Token is not a EXPRESSION.  Something went wrong!")
 
-            processed_value, temp_bool, msg = convert_to_xyce(expression_obj.value)
+            processed_value, msg = convert_to_xyce(expression_obj.value)
             processed_value = self.hack_ternary_operator(processed_value)
             pnl.add_known_object(processed_value, Types.expression)
 
@@ -958,16 +940,6 @@ class SpectreNetlistBoostParserInterface(object):
                 parsed_object.value = convert_si_unit_prefix(parsed_object.value)
 
             XyceNetlistBoostParserInterface.convert_next_token(parsed_object, parsed_object_iter, pnl, synthesized_pnls)
-
-        # if "temp" special variable detected, a .GLOBAL_PARAM statement pnl will be synthesized and flagged
-        # to indicate it belongs at the top circuit level
-        if temp_bool:
-            hack_pnl_synth = ParsedNetlistLine(pnl.filename, [0])
-            hack_pnl_synth.type = ".GLOBAL_PARAM"
-            hack_pnl_synth.local_type = ".GLOBAL_PARAM"
-            hack_pnl_synth.add_param_value_pair("XYCE_temp", "27")
-            hack_pnl_synth.flag_top_pnl = True
-            synthesized_pnls.append(hack_pnl_synth)
 
     @staticmethod
     def hack_ternary_operator(in_expression):
@@ -1022,3 +994,7 @@ class SpectreNetlistBoostParserInterface(object):
     @property
     def tnom_value(self):
         return self._tnom_value
+
+    @property
+    def temp_defined(self):
+        return self._temp_defined
