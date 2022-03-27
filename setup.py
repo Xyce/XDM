@@ -1,22 +1,31 @@
 from setuptools import setup, Extension, find_packages
-import setuptools.command.build_py
+from setuptools.command.install_scripts import install_scripts
+from setuptools.command.develop import develop
 import os
 
 XDM_VERSION = "2.4.0"
 
-class config_build(setuptools.command.build_py.build_py):
+def set_xdm_version():
+    source_file = os.path.join(os.path.dirname(__file__),
+            "src", "python", "xdm.py.in")
+    with open(source_file, 'r') as fi:
+        src_data = fi.read()
+    target_file = os.path.join(os.path.dirname(__file__),
+            "src", "python", "xdm_bdl.py")
+    with open(target_file, 'w') as fo:
+        fo.write(src_data.replace(
+            "@XDM_MAJOR_VERSION@.@XDM_MINOR_VERSION@.@XDM_PATCH_VERSION@",
+            XDM_VERSION))
+
+class install_xdm(install_scripts):
     def run(self):
-        source_file = os.path.join(os.path.dirname(__file__),
-                "src", "python", "xdm.py.in")
-        with open(source_file, 'r') as fi:
-            src_data = fi.read()
-        target_file = os.path.join(os.path.dirname(__file__),
-                "src", "python", "xdm_bdl.py")
-        with open(target_file, 'w') as fo:
-            fo.write(src_data.replace(
-                "@XDM_MAJOR_VERSION@.@XDM_MINOR_VERSION@.@XDM_PATCH_VERSION@",
-                XDM_VERSION))
-        setuptools.command.build_py.build_py.run(self)
+        set_xdm_version()
+        install_scripts.run(self)
+
+class develop_xdm(develop):
+    def run(self):
+        set_xdm_version()
+        develop.run(self)
 
 setup(  name = 'xdm_bdl',
         version = XDM_VERSION,
@@ -45,5 +54,5 @@ setup(  name = 'xdm_bdl',
         packages=find_packages(where='src/python'),
         package_data={'': ['schema/*.xml'],},
         scripts=['src/python/xdm_bdl.py'],
-        cmdclass={'build_py': config_build,},
+        cmdclass={'install_scripts': install_xdm, 'develop': develop_xdm},
         )
