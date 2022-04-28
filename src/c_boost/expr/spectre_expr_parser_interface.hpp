@@ -43,22 +43,12 @@
 class SpectreExprBoostParser
 {
     public:
-        boost::python::dict dict;
-        boost::python::list list;
-        boost::python::list list2;
         std::vector<std::string> param_list;
         std::unordered_map<std::string, double> variable_map;
         std::unordered_map<std::string, std::string> function_map;
         std::unordered_map<std::string, std::map<int, std::string>> function_variable_map;
 
         BoostParsedExpr parseExpr(std::string pythonExpr);
-        void import_func_statements(boost::python::dict & py_dict);
-        void import_func_args(boost::python::dict & py_dict);
-        void import_param_statements(boost::python::list & py_list);
-        BoostEvaluatedExpr eval_statements(boost::python::list & py_list,
-                                           boost::python::list & py_list_2);
-        void print_maps();
-
 };
 
 

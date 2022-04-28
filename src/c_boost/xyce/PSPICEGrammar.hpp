@@ -31,13 +31,14 @@ struct pspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
 {
     qi::rule<Iterator, std::vector<netlist_statement_object>()> aliases_dir, distribution_dir, endaliases_dir, loadbias_dir, mc_dir, noise_dir,
         plot_dir, savebias_dir, stimulus_dir, text_dir, tf_dir, vector_dir, watch_dir, wcase_dir, pspice_start, lib_dir, options_dir, print_dir,
-        probe_dir, temp_dir, tran_dir, analog_device, directive, probe_64_dir, nodeset_dir, autoconverge_dir, table,
-        current_ctrl_current_src, current_ctrl_voltage_src, voltage_ctrl_current_src, voltage_ctrl_voltage_src;
+        probe_dir, temp_dir, tran_dir, analog_device, directive, probe_64_dir, nodeset_dir, autoconverge_dir, resistor, table,
+        current_ctrl_current_src, current_ctrl_voltage_src, voltage_ctrl_current_src, voltage_ctrl_voltage_src,
+        temperature_coefficient_inst_params;
 
     qi::rule<Iterator, netlist_statement_object()> aliases_dir_type, distribution_dir_type, endaliases_dir_type, loadbias_dir_type, mc_dir_type,
         noise_dir_type, plot_dir_type, savebias_dir_type, stimulus_dir_type, text_dir_type, tf_dir_type, vector_dir_type, watch_dir_type,
         wcase_dir_type, tran_op_type, probe_dir_type,  probe_csdf_type, temp_dir_type, output_variable, TEMP_VALUE, probe_64_dir_type, nodeset_dir_type,
-        autoconverge_dir_type;
+        autoconverge_dir_type, temperature_coefficient;
 
     qi::rule<Iterator, std::string()> output_variable_expression, output_variable_node;
 
@@ -229,6 +230,15 @@ struct pspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
             qi::as_string[no_case[lit(".NODESET")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DIRECTIVE_TYPE))]
             ;
 
+        temperature_coefficient =
+             qi::as_string[no_case[lit("TC")]]  [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::PARAM_NAME))]
+            ;
+
+        temperature_coefficient_inst_params =
+            hold[temperature_coefficient >> -base_parser.white_space >> lit("=") >> -base_parser.white_space >> base_parser.param_value >> -base_parser.white_space >> lit(",") >> -base_parser.white_space >> base_parser.param_value] |
+            hold[temperature_coefficient >> -base_parser.white_space >> lit("=") >> -base_parser.white_space >> base_parser.param_value >> base_parser.white_space >> base_parser.param_value]
+            ;
+
         aliases_dir =
             aliases_dir_type >> base_parser.restOfLine
             ;
@@ -301,7 +311,12 @@ struct pspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
 
 
         analog_device =
-            (current_ctrl_voltage_src | voltage_ctrl_current_src | voltage_ctrl_voltage_src)
+            (resistor | current_ctrl_voltage_src | voltage_ctrl_current_src | voltage_ctrl_voltage_src)
+            ;
+
+        resistor =
+            base_parser.resistor_dev_type >> -base_parser.devname >> base_parser.white_space >> base_parser.POSNODE >> base_parser.white_space >> base_parser.NEGNODE >> -( base_parser.white_space >> !base_parser.param_value_pair >> base_parser.model_or_value)
+            >> -(base_parser.white_space >> !base_parser.param_value_pair >> base_parser.model_or_value) >> *(base_parser.white_space >> (temperature_coefficient_inst_params | base_parser.param_value_pair))
             ;
 
         current_ctrl_voltage_src =

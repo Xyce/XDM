@@ -239,13 +239,16 @@ class Writer(object):
 
         elif isinstance(ws, Command):
             lang = self._output_language.get_directive_by_name(ws.command_type)
+            combine_prints = self._combine_print_flag
+            is_print_statement = ws.command_type in ['.PRINT', '.PROBE', '.PROBE64']
+            is_temp_statement = ws.command_type == ".TEMP" or ws.command_type == ".TEMPERATURE"
 
 
             if ws.command_type != ".OPTIONS":
                 results = _process_sp(ws, _iaw_sp, _aw_sp, specialvariable=True)
                 can_convert_special_var, unsupported_var, conflicting_var = [i for i in results]
 
-            if self._combine_print_flag and ws.command_type in ['.PRINT', '.PROBE', '.PROBE64'] and can_convert_special_var:
+            if combine_prints and is_print_statement and can_convert_special_var:
                 results = _process_sp(ws, _iaw_ov, _aw_ov, outputvariable=True)
                 can_translate_output_var, unsupported_output_vars = [i for i in results]
 
@@ -254,7 +257,9 @@ class Writer(object):
 
                     for output_variable in ws.get_prop(Types.outputVariableList):
                         self._output_variable_list_aggregate[(ws.file, output_file)].append((output_variable, ws.line_num))
+
                     self._output_variable_list_line = self._cur_line
+
                     if ws.get_prop(Types.analysisTypeValue):
                         self._output_variable_list_analysis_type = ws.get_prop(Types.analysisTypeValue).upper()
                 else:
@@ -270,7 +275,7 @@ class Writer(object):
                     self._options_list_aggregate[option_package][key] = val
                     self._options_last_line_num = self._cur_line
 
-            elif (ws.command_type == ".TEMP" or ws.command_type == ".TEMPERATURE") and can_convert_special_var:
+            elif is_temp_statement and can_convert_special_var:
                 # Aggregate all the .TEMP statements before writing out
                 # Output statement will depend on the output language and whether one or more 
                 # .TEMP statements are present.
@@ -284,7 +289,7 @@ class Writer(object):
                     oline = "In file:'%s' at line:%s. Unsupported type: %s. Retained (as a comment). Continuing."
                     logging.warning(oline % (str(os.path.basename(ws.file)), str(ws.line_num), ws.command_type))
 
-                if ws.command_type in ['.PRINT', '.PROBE', '.PROBE64'] and can_convert_special_var:
+                if is_print_statement and can_convert_special_var:
                     results = _process_sp(ws, _iaw_ov, _aw_ov, outputvariable=True)
                     can_translate_output_var, unsupported_output_vars = [i for i in results]
 
@@ -564,20 +569,51 @@ class Writer(object):
     def clean_output_variable_list(self, in_list, to_version, line_num):
         out_list = []
 
+        # Iterate through list of output variables and the line numbers they appear on,
+        # ex., "('v(x1.a1)', [18])"
         for item in in_list:
             # Check if * is in an delimited expression. If it is in delimited expression, it's allowed.
             # If not, it is a wildcard and not allowed.
-            isExpression = self._is_expression(item[0])
+            is_expression = self._is_expression(item[0])
+            is_hspice = self.input_language.language == "hspice"
 
-            if not isExpression:
-                if ("xyce.xml" in to_version and "*" in item[0] and 
-                    not "V(*)" in ''.join(item[0].split()).upper()):
-                    oline = "Line(s):%s. Unsupported Output Variable in Xyce: %s"
-                    logging.warning(oline % (str(item[1]), str(item[0])))
 
-                    continue
+            if not is_expression:
+                output_variable = ''.join(item[0].split()).upper()
 
-            out_list.append(item[0])
+                hspice_allowed_output_variable = ( output_variable.startswith("V") or 
+                    output_variable.startswith("I") or
+                    output_variable.startswith("P") )
+
+
+                # The rules governing HSPICE and Xyce output variable wildcards seem to be aligned
+                # now. In addition, it is assumed that the output variable is legal in HSPICE - 
+                # XDM does not fix incorrect HSPICE syntax. Therefore, only legal node names or
+                # devices should be in the output variable already.
+                if is_hspice:
+                    if ("xyce.xml" in to_version and 
+                        not hspice_allowed_output_variable):
+                        oline = "Line(s):%s. Unsupported Output Variable in Xyce: %s"
+                        logging.warning(oline % (str(item[1]), str(item[0])))
+
+                        continue
+
+                # For translations from other languages besides HSPICE, continue to only allow 
+                # wildcard for output variable of V only since the rules governing other languages
+                # needs to be examined a little closer. For example, for PSpice, it seems there
+                # is no power output variable, and wildcards may not be allowed.
+                else:
+                    if ("xyce.xml" in to_version and "*" in item[0] and 
+                        not "V(*)" in ''.join(item[0].split()).upper()):
+                        oline = "Line(s):%s. Unsupported Output Variable in Xyce: %s"
+                        logging.warning(oline % (str(item[1]), str(item[0])))
+
+                        continue
+
+
+            # Remove any duplicate output variables
+            if item[0].lower() not in (x.lower() for x in out_list):
+                out_list.append(item[0])
 
         if "xyce.xml" in to_version and not out_list:
             oline = "Line(s):%s Writing .PRINT line with no variables.  Replacing with V(*)"

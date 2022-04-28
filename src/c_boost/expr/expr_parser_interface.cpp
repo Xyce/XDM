@@ -101,25 +101,9 @@ BOOST_PYTHON_MODULE(SpiritExprCommon)
 
     boost::python::class_<SpectreExprBoostParser>("SpectreExprBoostParser")
         .def("parseExpr", &SpectreExprBoostParser::parseExpr)
-        .def_readwrite("py_dict", &SpectreExprBoostParser::dict)
-        .def_readwrite("py_list", &SpectreExprBoostParser::list)
-        .def_readwrite("py_list2", &SpectreExprBoostParser::list2)
-        .def("import_func_statements", &SpectreExprBoostParser::import_func_statements)
-        .def("import_func_args", &SpectreExprBoostParser::import_func_args)
-        .def("import_param_statements", &SpectreExprBoostParser::import_param_statements)
-        .def("eval_statements", &SpectreExprBoostParser::eval_statements)
-        .def("print_maps", &SpectreExprBoostParser::print_maps)
         ;
 
     boost::python::class_<HSPICEExprBoostParser>("HSPICEExprBoostParser")
         .def("parseExpr", &HSPICEExprBoostParser::parseExpr)
-        .def_readwrite("py_dict", &HSPICEExprBoostParser::dict)
-        .def_readwrite("py_list", &HSPICEExprBoostParser::list)
-        .def_readwrite("py_list2", &HSPICEExprBoostParser::list2)
-        .def("import_func_statements", &HSPICEExprBoostParser::import_func_statements)
-        .def("import_func_args", &HSPICEExprBoostParser::import_func_args)
-        .def("import_param_statements", &HSPICEExprBoostParser::import_param_statements)
-        .def("eval_statements", &HSPICEExprBoostParser::eval_statements)
-        .def("print_maps", &HSPICEExprBoostParser::print_maps)
         ;
 }

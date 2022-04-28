@@ -47,9 +47,9 @@ struct spectre_parser : qi::grammar<Iterator, std::vector<netlist_statement_obje
         unknown_device, model_dir, param_dir, subckt_dir, ends_dir, func_dir, func_expr_dir, include_dir,
         library_dir, endlibrary_dir, modelParameter_dir, section_dir, endsection_dir,
         ac_dir, binned_model_dir, dc_dir, global_dir, tran_dir, save_dir, savestate_dir, sens_dir, if_dir,
-        spectrerf_dir, stitch_dir, vector_dir, veriloga_dir, simulator_dir, unsupported_dir,
-        delimiter_open_dir, delimiter_close_dir, source_inst_params, mutual_inductor_inst_params,
-        port_inst_params, dc_inst_params
+        else_dir, else_if_dir, spectrerf_dir, stitch_dir, vector_dir, veriloga_dir, simulator_dir,
+        unsupported_dir, delimiter_open_dir, delimiter_close_dir, source_inst_params,
+        mutual_inductor_inst_params, port_inst_params, dc_inst_params
             ;
 
     qi::rule<Iterator, netlist_statement_object()>
@@ -77,8 +77,8 @@ struct spectre_parser : qi::grammar<Iterator, std::vector<netlist_statement_obje
         tdr_dir_type, tran_dir_type, uti_dir_type, xf_dir_type,
         analogmodel_dir_type, bsource_dir_type, checkpoint_dir_type,
         smiconfig_dir_type, constants_dir_type, convergence_dir_type,
-        encryption_dir_type, expressions_dir_type, functions_dir_type,
-        global_dir_type, ibis_dir_type, ic_dir_type, if_dir_type,
+        encryption_dir_type, expressions_dir_type, else_dir_type, else_if_dir_type,
+        functions_dir_type, global_dir_type, ibis_dir_type, ic_dir_type, if_dir_type,
         keywords_dir_type, memory_dir_type, nodeset_dir_type,
         param_limits_dir_type, paramset_dir_type, rfmemory_dir_type, save_dir_type,
         savestate_dir_type, sens_dir_type, spectrerf_dir_type, stitch_dir_type,
@@ -822,6 +822,16 @@ struct spectre_parser : qi::grammar<Iterator, std::vector<netlist_statement_obje
                         adm_boost_common::DIRECTIVE_TYPE))]
             ;
 
+        else_dir_type =
+            qi::as_string[no_case[lit("else")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(
+                        adm_boost_common::DIRECTIVE_TYPE))]
+            ;
+
+        else_if_dir_type =
+            qi::as_string[no_case[lit("else if")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(
+                        adm_boost_common::DIRECTIVE_TYPE))]
+            ;
+
         encryption_dir_type =
             qi::as_string[no_case[lit("encryption")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(
                         adm_boost_common::DIRECTIVE_TYPE))]
@@ -1057,10 +1067,10 @@ struct spectre_parser : qi::grammar<Iterator, std::vector<netlist_statement_obje
 
         directive =
             (
-             ac_dir | binned_model_dir | delimiter_open_dir | delimiter_close_dir | dc_dir | modelParameter_dir |
-             section_dir | endsection_dir | func_dir | func_expr_dir | global_dir | model_dir | param_dir | ends_dir |
-             if_dir | include_dir | library_dir | endlibrary_dir | tran_dir | save_dir | simulator_dir |
-             subckt_dir | unsupported_dir
+             ac_dir | binned_model_dir | else_if_dir | else_dir | delimiter_open_dir | delimiter_close_dir |
+             dc_dir | modelParameter_dir | section_dir | endsection_dir | func_dir | func_expr_dir | global_dir |
+             model_dir | param_dir | ends_dir | if_dir | include_dir | library_dir | endlibrary_dir | tran_dir |
+             save_dir | simulator_dir | subckt_dir | unsupported_dir
             )
             ;
 
@@ -1116,6 +1126,17 @@ struct spectre_parser : qi::grammar<Iterator, std::vector<netlist_statement_obje
             hold[delimiter_close_dir_type >> qi::eol] |
             hold[delimiter_close_dir_type]
             ;
+
+
+        else_dir =
+            hold[delimiter_close_dir >> -white_space >> else_dir_type >> -(-white_space >> delimiter_open_dir)]
+            ;
+
+
+        else_if_dir =
+            hold[delimiter_close_dir >> -white_space >> else_if_dir_type >> +(white_space >> IF_COND) >> -(-white_space >> delimiter_open_dir)]
+            ;
+
 
         func_dir_type =
             qi::as_string[no_case[lit("real")]][symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DIRECTIVE_TYPE))]

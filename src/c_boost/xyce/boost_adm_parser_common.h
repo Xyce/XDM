@@ -24,7 +24,6 @@
 #if !defined(ADM_BOOST_COMMON)
 #define ADM_BOOST_COMMON
 
-#define FUSION_MAX_VECTOR_SIZE 20
 #include <boost/config/warning_disable.hpp>
 #include <boost/spirit/include/qi.hpp>
 #include <boost/spirit/include/phoenix_core.hpp>

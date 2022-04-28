@@ -325,16 +325,6 @@ class HSPICENetlistBoostParserInterface:
 
             pnl.add_known_object(adm_type, Types.modelType)
 
-            # create a pnl for model binning option
-            if "." in pnl.name:
-                pnl_synth = ParsedNetlistLine(pnl.filename, [0])  # what to do with line numbers?
-                pnl_synth.type = ".OPTIONS"
-                pnl_synth.local_type = ".OPTIONS"
-                pnl_synth.add_known_object("PARSER", Types.optionPkgTypeValue)
-                pnl_synth.add_param_value_pair("model_binning", "true")
-                pnl_synth.flag_top_pnl = True
-                synthesized_pnls.append(pnl_synth)
-
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.GENERALNODE and not pnl.type in [".IC", ".DCVOLT", ".NODESET"]:
 

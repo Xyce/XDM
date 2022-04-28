@@ -52,13 +52,6 @@ class HSPICEExprBoostParser
             function_variable_map;
 
         BoostParsedExpr parseExpr(std::string pythonExpr);
-        void import_func_statements(boost::python::dict & py_dict);
-        void import_func_args(boost::python::dict & py_dict);
-        void import_param_statements(boost::python::list & py_list);
-        BoostEvaluatedExpr eval_statements(boost::python::list & py_list,
-                                           boost::python::list & py_list_2);
-        void print_maps();
-
 };
 
 

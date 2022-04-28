@@ -201,15 +201,19 @@ class PSPICENetlistBoostParserInterface(object):
                 pnl.name = ".OPTIONS " + orig_param_name
                 pnl.add_comment(".OPTIONS " + orig_param_name)
 
+
         elif parsed_object.types[0] == SpiritCommon.data_model_type.DIRECTIVE_NAME and parsed_object.value.upper() == ".LIB":
             pnl.type = ".INC"
+
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.DIRECTIVE_NAME and parsed_object.value == ".PARAM":
             pnl.type = ".GLOBAL_PARAM"
 
+
         elif parsed_object.types[0] == SpiritCommon.data_model_type.DIRECTIVE_NAME and (parsed_object.value.upper() == ".PROBE" or parsed_object.value.upper() == ".PROBE64"):
             pnl.type = ".PRINT"
             pnl.add_known_object("TRAN", Types.analysisTypeValue)  # default tran type
+
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.OUTPUT_VARIABLE:
 
@@ -217,6 +221,7 @@ class PSPICENetlistBoostParserInterface(object):
             output_variable_clean = self.clean_pspice_output_variable(parsed_object.value)
 
             pnl.add_output_variable_value(output_variable_clean)
+
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.MODEL_TYPE and pnl.type == ".MODEL":
 
@@ -229,9 +234,17 @@ class PSPICENetlistBoostParserInterface(object):
 
             pnl.add_known_object(adm_type, Types.modelType)
 
+
         elif parsed_object.types[0] == SpiritCommon.data_model_type.GENERALNODE and not pnl.type in [".IC", ".DCVOLT", ".NODESET"]:
             output_node = parsed_object.value.replace(".", ":")
             pnl.add_known_object(output_node, BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]])
+
+
+        elif parsed_object.types[0] == SpiritCommon.data_model_type.PARAM_VALUE and pnl.params_dict and pnl.type == "R":
+            last_key = list(pnl.params_dict.keys())[-1]
+            prev_param_value = pnl.params_dict[last_key]
+            pnl.params_dict[last_key] = prev_param_value + "," + parsed_object.value
+
 
         else:
             XyceNetlistBoostParserInterface.convert_next_token(parsed_object, parsed_object_iter, pnl, synthesized_pnls)

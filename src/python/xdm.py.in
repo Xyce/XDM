@@ -48,7 +48,6 @@ from xdm.inout.readers.XyceNetlistBoostParserInterface import XyceNetlistBoostPa
 from xdm.inout.writers.Writer import Writer
 from xdm.inout.xml import XmlFactory
 from xdm.expr import expr_utils
-from xdm.expr.Context import Context
 #  from xdm import Types
 
 XDM_VERSION = "@XDM_MAJOR_VERSION@.@XDM_MINOR_VERSION@.@XDM_PATCH_VERSION@"
@@ -153,8 +152,6 @@ parser.add_argument('-o', '--output_file_format', nargs='?',
 
 parser.add_argument('--auto', action='store_true',
                     help='Automatically translate include and library files')
-
-parser.add_argument('--eval', action='store_true', help='Evaluate functions during translation')
 
 parser.add_argument('-l', '--logging', action='store', type=str,
                     default="WARN", dest='log_level',
@@ -294,58 +291,6 @@ if args.device_type == "None":  # Standard xdm flavor conversion execution
 
         if not os.path.isdir(args.dir_out):
             os.makedirs(args.dir_out)
-
-        if args.eval:  # also evaluate functions
-            curr_hier = []
-            context_list = []
-            sibling_scope = []
-            print("Tracing device hierarchy...")
-            expr_utils.trace_subckt_instantiations(
-                curr_hier, reader.name_scope_index, [], [], context_list, [],
-                is_top_level=True)
-
-            # find & evaluate functions used in subcircuit instantiations
-            subckts_to_update = []
-            subckt_update_info = {}
-            for context in context_list:
-                context.add_st_to_context(reader.name_scope_index.all_statements_in_scope, "")
-
-                for subckt_scope in context.scopes_in_context:
-                    if subckt_scope.subckt_command.name:
-                        subckts_to_update.append(subckt_scope)
-
-                context.find_funcs_to_be_evaluated()
-
-                if not context.func_expr:
-                    continue
-
-                expr_parser = expr_utils.expr_spirit_interface(context)
-
-                expr_parser.py_list = context.func_hierarchy
-                expr_parser.py_list_2 = context.func_expr
-                output = expr_parser.eval_statements(expr_parser.py_list, expr_parser.py_list_2)
-                expr_utils.update_subckt_instantiations("", reader.name_scope_index, [], [], [], context.func_hierarchy,
-                                                        context.func_expr, output.evalResult, subckt_update_info,
-                                                        is_top_level=True)
-
-            # update to subckt definitions
-            expr_utils.update_subckt(subckts_to_update, subckt_update_info)
-
-            # find & evaluate functions used in top level circuit
-            context = Context([], [])
-            context.add_st_to_context(reader.name_scope_index.all_statements_in_scope, "")
-            context.find_funcs_to_be_evaluated(global_context=True)
-
-            expr_parser = expr_utils.expr_spirit_interface(context)
-
-            expr_parser.py_list = context.func_hierarchy
-            expr_parser.py_list_2 = context.func_expr
-            output = expr_parser.eval_statements(expr_parser.py_list, expr_parser.py_list_2)
-            expr_utils.update_params("", context.func_hierarchy, context.func_expr,
-                                     output.evalResult, context.st_in_context, context.scope_names)
-
-            # comment out functions in all scopes
-            expr_utils.comment_out_funcs(sli)
 
         for fl, objs in sli:
             if fl:

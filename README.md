@@ -1,3 +1,5 @@
+# Xyce(TM) XDM Netlist Translator
+
 Xyce(TM) XDM Netlist Translator
 Copyright 2002-2020 National Technology & Engineering Solutions of
 Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
@@ -17,7 +19,6 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-# Xyce(TM) XDM Netlist Translator
 
 XDM uses CMake, the Boost Spirit header files, the Boost Python libraries, and
 Python 3 to create a mixed language Python/C++ tool called xdm_bdl that can
@@ -29,76 +30,66 @@ along with the XDM User's Guide. Source code for XDM and Xyce can be found here
 
 There are two ways to run xdm_bdl both are available with the released version
 of XDM:
-
-    2. As a standalone executable built from xdm_bdl.py and the aforementioned
-       binaries using PyInstaller. Both are available in the release of XDM
-
     1. As a python script xdm_bdl.py that loads the compiled XDM libraries
        SpiritCommon, SpiritExprCommon, and XdmRapidXmlReader. These are C++
        libraries that can be imported as Python 3 modules.
-
+    2. As a standalone executable built from xdm_bdl.py and the aforementioned
+       binaries using PyInstaller. Both are available in the release of XDM
 
 # Building XDM
 
-Building XDM and it's dependents can be tricky since there are many versions of
-Boost, Python 3, and C++ compilers available not all of which are compatible
-with each other. In particular older versions of Boost (before Boost 1.70.0)
-don't have CMake support and XDM developers may have trouble building
-pre-1.70.0 Boost against later versions of Python 3 and recent C++ compilers.
-XDM is developed with Boost 1.70.0 and later, Python 3.8 and 3.9, Clang 12, and
-GCC 8.3 XDM's only C++11 restriction is having a C++11 compatible compiler. As
-such, older compilers may work but aren't supported. Experience has shown that
-more modern compilers can yield noticeable speed improvements which may be a
-factor when converting large files.
+Building XDM can be tricky since there are many versions of Boost, Python 3,
+and C++ compilers available not all of which are compatible with each other. In
+particular older versions of Boost (before Boost 1.70.0) don't have CMake
+support and XDM developers may have trouble building against later versions of
+Python 3 and recent C++ compilers. XDM is developed with Boost 1.70.0 and
+later, Python 3.8 and 3.9, Clang 12, and GCC 8.X.X. XDM's only C++11
+restriction is having a C++11 compatible compiler. As such, older compilers may
+work as well but aren't supported. Experience has shown that more modern
+compilers can yield noticeable speed improvements, which may be a factor when
+converting large files.
 
 
-# CMake configure
+## CMake configure
 
 The XDM build should be simple given a system where the Boost Python libraries
 are installed with CMake support and built against Python 3. Something like the
 CMake command below should work from an empty directory intended to be the
-XDM build directory.
+build XDM.
 
 
-## Configure with Boost with CMake Support
+### Configure with Boost with CMake Support
 
-```
+    ```
     cmake <path to XDM source> \
         -DBOOST_ROOT=<top level boost intallation location> \
-        -DPYINSTALLER_PATH=<path to pyinstaller>
-```
+        -DPyInstaller_PATH=${PyInstaller_PATH}
+    ```
 
     
-## Configure with Boost without CMake Support
+### Configure with Boost without CMake Support
 
-In some cases the Boost CMake configuration files may not be helpful in
-building XDM. In particular Windows builds of Boost seem to be missing
-information required to copy the Boost Python libraries to the XDM build
-directory. (This is required for the Boost-Pytnon modules on Windows). In those
-cases it helps to tell CMake to not use the Boost CMake configuration files and
-instead explicitly specify the Boost headers and Boost Python libraries.
+The following should also work in the above case but also if Boost doesn't have
+CMake support:
     
-```
+    ```
     cmake <path to XDM source> \
         -DBoost_NO_BOOST_CMAKE=ON \
-        -DBoost_INCLUDE_DIR=<path to boost include directory> \
-        -DBoost_PYTHON38_LIBRARY_RELEASE=<path to boost-python release dir> \
-        -DBoost_PYTHON38_LIBRARY_DEBUG=<path to boost-python release dir> \
-        -DPYINSTALLER_PATH=<path to pyinstaller>
-```
+        -DBOOST_INCLUDEDIR=<top level boost installation locations>/include \
+        -DBOOST_LIBARYDIR=<top level boost installation location>k/lib \
+        -DPyInstaller_PATH=${PyInstaller_PATH}
+    ```
+    
+The "top level boost installation location" should contain the typical
+"include" and "lib" directories and with a "lib/cmake" sub-directory that
+contains a number of CMake files if CMake support is available.
 
-In the above either the Debug or Release version of the libraries are required
-depending on which CMAKE_BUILD_TYPE is choosen. Of course the "38" in the above
-snippet refers to the Python 3 major and minor version numbers used to build
-the Boost Python libraries.
-
-
-# Notes:
+Notes:
 
     1. CMake can be invoked from the command line on Unix-like systems with the
        command ```cmake``` or ```ccmake``` to use an interactive NCurses GUI.
-       On Windows CMake also has a GUI and it works much like the Unix based
-       NCurses interface.
+       On Windows CMake is GUI based and works much like the Unix based NCurses
+       interface.
     2. PyInstaller is optional for building XDM. If is available to CMake it
        will be used to create a standalone executable xdm_bdl that can be
        relocated and shared with others on compatible systems. If PyInstaller
@@ -121,13 +112,8 @@ the Boost Python libraries.
         - [CMAKE_CXX_COMPILER](https://cmake.org/cmake/help/latest/variable/CMAKE_LANG_COMPILER.html#variable:CMAKE_%3CLANG%3E_COMPILER)
     7. For available CMake build configurations see: [CMake Build Variants](https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html)
     8. XDM will not work with Python 2.
-    9. Adding the CMake flag "-DPython3_FIND_VIRTUALENV=ONLY" helps CMake find
-       the correct version of Python 3 if you are using a Python virtual
-       environment. By default CMake finds the latest version of Python whether
-       there is a Python interpreter in your path or not.
-
        
-# Common CMake XDM problems:
+Common CMake XDM problems:
 
     1. The most common XDM build problem is when Boost is built with a
        different version of Python from what CMake found in the configuration

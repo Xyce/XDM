@@ -40,7 +40,7 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
         generic_switch;
 
     qi::rule<Iterator, std::vector<netlist_statement_object>()> ac_dir, dc_dir, dcvolt_dir, eom_dir, end_dir, enddata_dir, ends_dir, endl_dir, global_param_dir, global_dir, hb_dir, ic_dir, inc_dir, lib_dir, measure_dir, model_dir,
-        nodeset_dir, op_dir, options_dir, param_dir, preprocess_dir, print_dir, save_dir, sens_dir, subckt_dir, temp_dir, tran_dir, four_dir, mor_dir, mpde_dir, lin_dir, data_dir,
+        nodeset_dir, op_dir, options_dir, param_dir, print_dir, save_dir, subckt_dir, temp_dir, tran_dir, four_dir, lin_dir, data_dir,
         if_dir, else_dir, elseif_dir, endif_dir;
 
     qi::rule<Iterator, netlist_statement_object()> AREA_VALUE, TRANSCONDUCTANCE_VALUE, COUPLING_VALUE, FUND_FREQ_VALUE, GAIN_VALUE,
@@ -51,17 +51,17 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
         EXTERNALBODYCONTACTNODE, INTERNALBODYCONTACTNODE, devname, devtype, control_inductor_dev_name,
         control_inductor_dev_type, vbic_model_type, vbic_model_name, model_name, model_or_value,
         capacitor_dev_type, port_dev_type, resistor_dev_type, transient_func_type, transient_ref_name, indep_voltage_src_type, model_dir_type, print_dir_type,
-        param_name, param_value, port_param_name, param_value_no_comma, output_variable, analysis_type, param_dir_type, preprocess_dir_type, expression, non_linear_dep_src_type,
+        param_name, param_value, port_param_name, param_value_no_comma, output_variable, analysis_type, param_dir_type, expression, non_linear_dep_src_type,
         diode_dev_type, eom_dir_type, enddata_dir_type, ends_dir_type, end_dir_type, endl_dir_type, sweep_func_type, data_dir_type, dc_dir_type, general_node, model_or_value_or_node, bjt_dev_type, mosfet_type,
-        options_dir_type, temp_dir_type, tran_dir_type, indep_current_src_type, op_dir_type, subcircuit_type, subckt_dir_type, params_set_type, inline_comment, comment,
+        options_dir_type, temp_dir_type, tran_dir_type, indep_current_src_type, op_dir_type, subcircuit_type, subckt_dir_type, inline_comment, comment,
         ac_dir_type, global_param_dir_type, global_dir_type, inductor_dev_type, model_or_node, ic_dir_type, ic_dir_type_alt, dcvolt_dir_type, simple_v_output, mutual_inductor_dev_type,
         current_ctrl_switch_dev_type, voltage_ctrl_switch_dev_type, digital_dev_type, lossless_trans_line_type, table_type, poly_type, voltage_ctrl_voltage_src_dev_type,
         on_type, off_type, lin_sweep_type, oct_sweep_type, dec_sweep_type, voltage_type, current_type, value_type, voltage_ctrl_current_src_dev_type,
-        jfet_dev_type, param_type, objfunc_type, save_dir_type, sens_dir_type, model_type, inc_dir_type, lib_dir_type, measure_dir_type, filename, value_or_node, list_param_value, printStepValue, finalTimeValue,
+        jfet_dev_type, param_type, save_dir_type, model_type, inc_dir_type, lib_dir_type, measure_dir_type, filename, value_or_node, list_param_value, printStepValue, finalTimeValue,
         startTimeValue, stepCeilingValue, current_ctrl_current_src_dev_type, current_ctrl_voltage_src_dev_type, mesfet_type, lossy_trans_line_type, lib_entry, dc_value_type, dc_value_value,
-        ac_value_type, ac_mag_value, ac_phase_value, result_name_value, measurement_type, hb_dir_type, preprocess_keyword, generic_switch_dev_type, control_str, table_param_value, poly_param_value,
+        ac_value_type, ac_mag_value, ac_phase_value, result_name_value, measurement_type, hb_dir_type, generic_switch_dev_type, control_str, table_param_value, poly_param_value,
         control_param_value, subckt_directive_param_value, subckt_device_param_value, points_value, start_freq_value, end_freq_value, nodeset_dir_type, FREQ_VALUE, four_dir_type, FUNC_ARG_VALUE,
-        FUNC_NAME_VALUE, FUNC_EXPRESSION, NOOP_VALUE, UIC_VALUE, schedule_param_value, SCHEDULE_TYPE, sweep_param, sweep_value, restOfLine, mor_dir_type, mpde_dir_type, no_curly_brace_expression_sym,
+        FUNC_NAME_VALUE, FUNC_EXPRESSION, NOOP_VALUE, UIC_VALUE, schedule_param_value, SCHEDULE_TYPE, sweep_param, sweep_value, restOfLine, no_curly_brace_expression_sym,
         pulse_trans_type, sin_trans_type, exp_trans_type, pwl_trans_type, sffm_trans_type, default_param_name, par_output, lin_dir_type, probe_dir_type, measurement_qualifier,
         measure_param_name, measure_param_value, variable_expr_or_value, vol_type, cur_type, standalone_param, data_table_name, data_param_name, data_param_value, if_dir_type, else_dir_type, elseif_dir_type, endif_dir_type,
         IF_COND;
@@ -762,24 +762,11 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
              qi::as_string[no_case[lit("AC")]] |
              qi::as_string[no_case[lit("TRAN")]] |
              qi::as_string[no_case[lit("TR")]] |
-             qi::as_string[no_case[lit("SENS")]] |
-             qi::as_string[no_case[lit("HOMOTOPY")]] |
-             qi::as_string[no_case[lit("MPDE")]] |
              qi::as_string[no_case[lit("HB")]])  [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::ANALYSIS_TYPE))]
-            ;
-
-        preprocess_keyword =
-            (qi::as_string[no_case[lit("ADDRESISTORS")]] |
-             qi::as_string[no_case[lit("REMOVEUNUSED")]] |
-             qi::as_string[no_case[lit("REPLACEGROUND")]]) [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::PREPROCESS_KEYWORD))]
             ;
 
         param_type =
             qi::as_string[no_case[lit("param")]]  [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::VALUE))]
-            ;
-
-        params_set_type =
-            qi::as_string[no_case[lit("PARAMS:")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::PARAMS_HEADER))]
             ;
 
         on_type =
@@ -842,10 +829,6 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
             hold[cur_type >> -white_space >> no_curly_brace_expression_sym]
             ;
 
-        objfunc_type =
-            qi::as_string[no_case[lit("objfunc")]]  [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::VALUE))]
-            ;
-
         circuit_params =
             param_name >> *(-white_space >> lit(",") >> param_name)
             ;
@@ -863,8 +846,8 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
 
         directive =
             ac_dir | data_dir | dcvolt_dir | dc_dir | eom_dir | ends_dir | endl_dir | enddata_dir | endif_dir | end_dir | global_param_dir | global_dir | hb_dir | inc_dir | ic_dir | lib_dir |
-            lin_dir | measure_dir | model_dir | four_dir | nodeset_dir | options_dir | op_dir | preprocess_dir | print_dir | param_dir | save_dir | sens_dir | subckt_dir | temp_dir |
-            tran_dir | mor_dir | mpde_dir | if_dir | elseif_dir | else_dir
+            lin_dir | measure_dir | model_dir | four_dir | nodeset_dir | options_dir | op_dir | print_dir | param_dir | save_dir | subckt_dir | temp_dir |
+            tran_dir | if_dir | elseif_dir | else_dir
         ;
 
         ac_dir_type =
@@ -1111,14 +1094,6 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
             hold[(white_space >> function_expression >> -lit(","))])
             ;
 
-        preprocess_dir_type =
-            qi::as_string[no_case[lit(".PREPROCESS")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DIRECTIVE_TYPE))]
-            ;
-
-        preprocess_dir =
-            preprocess_dir_type >> white_space >> preprocess_keyword >> +(white_space >> list_param_value)
-            ;
-
         print_dir_type =
             qi::as_string[no_case[lit(".PRINT")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DIRECTIVE_TYPE))]
             ;
@@ -1137,14 +1112,6 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
 
         save_dir =
             save_dir_type >> *(white_space >> param_value_pair)
-            ;
-
-        sens_dir_type =
-            qi::as_string[no_case[lit(".SENS")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DIRECTIVE_TYPE))]
-            ;
-
-        sens_dir =
-            sens_dir_type >> *(white_space >> param_value_pair)
             ;
 
         subckt_dir_type =
@@ -1176,23 +1143,6 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
             -(white_space >> !UIC_VALUE >> no_case[lit("START")] >> lit("=") >> startTimeValue) >>
             -(white_space >> UIC_VALUE) >> 
             -(white_space >> no_case[lit("SWEEP")] >> white_space >> no_case[lit("DATA")] >> -white_space >> lit("=") >> -white_space >> data_table_name)
-            ;
-
-        mor_dir_type =
-            qi::as_string[no_case[lit(".MOR")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DIRECTIVE_TYPE))]
-            ;
-
-        mor_dir =
-            mor_dir_type >> restOfLine
-            ;
-
-
-        mpde_dir_type =
-            qi::as_string[no_case[lit(".MPDE")]] [symbol_adder(_val, boost::spirit::_1, vector_of<data_model_type>(adm_boost_common::DIRECTIVE_TYPE))]
-            ;
-
-        mpde_dir =
-            mpde_dir_type >> restOfLine
             ;
 
         // ANALOG DEVICES  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

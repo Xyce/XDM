@@ -54,7 +54,7 @@ spectre_to_adm_model_type_map = {"resistor": "R", "capacitor": "C", "diode": "D"
                                  "bsource": "B", "checkpoint": "checkpoint", "smiconfig": "smiconfig",
                                  "constants": "constants", "convergence": "convergence", "encryption": "encryption",
                                  "expressions": "expressions", "functions": "functions", "global": ".GLOBAL",
-                                 "ibis": "ibis", "ic": "ic", "if": "if", "keywords": "keywords", "memory": "memory",
+                                 "ibis": "ibis", "ic": "ic", "if": ".IF", "keywords": "keywords", "memory": "memory",
                                  "nodeset": "nodeset", "param_limits": "param_limits", "paramset": "paramset",
                                  "real": ".FUNC", "rfmemory": "rfmemory", "save": ".PRINT", "savestate": "savestate",
                                  "sens": "sens", "spectrerf": "spectrerf", "stitch": "stitch", "vector": "vector",
@@ -63,7 +63,7 @@ spectre_to_adm_model_type_map = {"resistor": "R", "capacitor": "C", "diode": "D"
                                  "simulatorOptions": "simulatorOptions", "finalTimeOP": "finalTimeOP",
                                  "element": "element", "outputParameter": "outputParameter",
                                  "designParamVals": "designParamVals", "primitives": "primitives", "subckts": "subckts",
-                                 "saveOptions": "saveOptions"}
+                                 "saveOptions": "saveOptions", "else": ".ELSE", "else if": ".ELSEIF"}
 
 spectre_tran_param_type = {
     "step": Types.printStepValue,
@@ -258,7 +258,6 @@ class SpectreNetlistBoostParserInterface(object):
 
         # flag to indicate modifications should be to last synthesized pnl in stack
         self._modify_synth_pnl = False
-        self._write_model_binning_option = False
 
         if not self.goodfile:
             logging.error("File: " + filename + " was not found. Please locate this file and try again.\n\n\n")
@@ -556,12 +555,29 @@ class SpectreNetlistBoostParserInterface(object):
 
                 next(parsed_object_iter)
 
-            if pnl.type == "if":
+            if pnl.type == ".IF":
 
                 pnl.type = "COMMENT"
                 pnl.add_comment(parsed_object.value)
 
                 self._if_statement = True
+
+            elif pnl.type == ".ELSE":
+
+                pnl.type = "COMMENT"
+                pnl.add_comment(parsed_object.value)
+
+                self._if_statement = True
+                self._comment_end_of_if_statement = False
+
+            elif pnl.type == ".ELSEIF":
+
+                pnl.type = "COMMENT"
+                pnl.add_comment(parsed_object.value)
+
+                self._if_statement = True
+                self._comment_end_of_if_statement = False
+
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.MODEL_NAME and not pnl.type == ".MODEL":
 
@@ -879,18 +895,6 @@ class SpectreNetlistBoostParserInterface(object):
             pnl.add_comment(comment)
 
         elif parsed_object.types[0] == SpiritCommon.data_model_type.BINNED_MODEL_NAME:
-
-            # create a pnl for model binning option
-            if not self._write_model_binning_option:
-
-                pnl_synth = ParsedNetlistLine(pnl.filename, [0])  # what to do with line numbers?
-                pnl_synth.type = ".OPTIONS"
-                pnl_synth.local_type = ".OPTIONS"
-                pnl_synth.add_known_object("PARSER", Types.optionPkgTypeValue)
-                pnl_synth.add_param_value_pair("model_binning", "true")
-                synthesized_pnls.append(pnl_synth)
-
-                self._model_binning_option = True
 
             # if "." already in model name, need to create synthesized pnl for next
             # binned model
