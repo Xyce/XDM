@@ -1,0 +1,19 @@
+#
+# .gitignore for data-model
+#
+
+# Ignore python object code artifacts.
+*.pyc
+
+# Ignore some Mac-specific files.
+**/.DS_Store
+
+# ignore eclipse project files
+.project
+.cproject
+
+# ignore CLion and PyCharm project files
+.idea
+
+# ignore build dir
+build/
