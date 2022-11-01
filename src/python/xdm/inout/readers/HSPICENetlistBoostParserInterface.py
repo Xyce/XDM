@@ -547,6 +547,12 @@ class HSPICENetlistBoostParserInterface:
                         self._np = -1
 
 
+        elif parsed_object.types[0] == SpiritCommon.data_model_type.EXPRESSION:
+            processed_value = self.curly_braces_for_expressions(parsed_object.value)
+            pnl.add_known_object(processed_value, BoostParserInterface.boost_xdm_map_dict[parsed_object.types[0]])
+            
+
+
         else:
             XyceNetlistBoostParserInterface.convert_next_token(parsed_object, parsed_object_iter, pnl, synthesized_pnls)
 
@@ -623,6 +629,10 @@ class HSPICENetlistBoostParserInterface:
         # if so, just return expression
         if in_expression.startswith("'") and in_expression.endswith("'"):
             return in_expression
+
+        # check if expression is enclosed in double quotes
+        if in_expression.startswith('"') and in_expression.endswith('"'):
+            in_expression = in_expression[1:-1]
 
         # remove single quotes that may be around function arguments
         expression_fields = in_expression.split("'")

@@ -66,9 +66,9 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
         measure_param_name, measure_param_value, variable_expr_or_value, vol_type, cur_type, standalone_param, data_table_name, data_param_name, data_param_value, if_dir_type, else_dir_type, elseif_dir_type, endif_dir_type,
         IF_COND;
 
-    qi::rule<Iterator, std::string()> identifier, math_expression, math_expression_single_quote_delimiter, math_expression_no_delimiter, composite_math_expression, output_variable_expression,
-        simple_v_output_expression, inline_comment_str, comment_str, filename_str, param_with_comma, raw_identifier, no_curly_brace_expression, any, node_identifier, raw_node_identifier,
-        parenthetical_expression, numeric, number;
+    qi::rule<Iterator, std::string()> identifier, math_expression, math_expression_single_quote_delimiter, math_expression_double_quote_delimiter, math_expression_no_delimiter, composite_math_expression,
+        output_variable_expression, simple_v_output_expression, inline_comment_str, comment_str, filename_str, param_with_comma, raw_identifier, no_curly_brace_expression, any, node_identifier,
+        raw_node_identifier, parenthetical_expression, numeric, number;
 
     qi::rule<Iterator> white_space, par_name;
 
@@ -131,12 +131,16 @@ struct hspice_parser : qi::grammar<Iterator, std::vector<netlist_statement_objec
             char_("'") >> +(parenthetical_expression | +char_("a-zA-Z0-9.+/*^,_=<> \t!|$&?:~-")) >> char_("'")
             ;
 
+        math_expression_double_quote_delimiter =
+            char_("\"") >> +(parenthetical_expression | +char_("a-zA-Z0-9.+/*^,_=<> \t!|$&?:~-")) >> char_("\"")
+            ;
+
         math_expression_no_delimiter =
             parenthetical_expression | char_("a-zA-Z0-9.+,_=<>!|&:~-") >> *(parenthetical_expression | +char_("a-zA-Z0-9.+/*^,_=<>'!|$&?:~-"))
             ;
 
         math_expression =
-            math_expression_single_quote_delimiter | math_expression_no_delimiter
+            math_expression_single_quote_delimiter | math_expression_double_quote_delimiter | math_expression_no_delimiter
             ;
 
         simple_v_output_expression =

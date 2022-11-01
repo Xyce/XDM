@@ -923,7 +923,8 @@ def build_model(parsed_netlist_line, reader_state, language_definition):
 
     if parsed_netlist_line.params_dict.get("VERSION"):
         version = parsed_netlist_line.params_dict["VERSION"]
-        del parsed_netlist_line.params_dict["VERSION"]
+        if language_definition.language != "hspice":
+            del parsed_netlist_line.params_dict["VERSION"]
 
     language_device_types = language_definition.get_devices_by_local_name(model_device_type)
     language_device_type = None

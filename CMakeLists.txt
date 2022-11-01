@@ -20,7 +20,7 @@ set(CMAKE_LEGACY_CYGWIN_WIN32 0)
 # Process the Version Numbers
 #------------------------------------
 set(XDM_MAJOR_VERSION "2")
-set(XDM_MINOR_VERSION "5")
+set(XDM_MINOR_VERSION "6")
 set(XDM_PATCH_VERSION "0")
 if( NOT XDM_MAJOR_VERSION MATCHES "[0-9]+" )
   set( XDM_MAJOR_VERSION "X" CACHE STRING "The major version number for this build." )
@@ -364,16 +364,6 @@ if(PYINSTALLER_PATH)
     DESTINATION bin
     COMPONENT application
     )
-endif()
-
-#------------------------------------
-# Build Test Cases
-#------------------------------------
-option( BUILD_TESTS "GTests for expression parser." OFF )
-if( BUILD_TESTS )
-  enable_testing()
-  find_package(GTest REQUIRED)
-  add_subdirectory( "${CMAKE_CURRENT_SOURCE_DIR}/tests" )
 endif()
 
 #------------------------------------

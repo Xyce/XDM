@@ -208,24 +208,37 @@ class NAME_SCOPE_INDEX(MasterIndex):
 
         # If MASTER_MODEL already exists
         model_name = m.name
+
+
         if case_insensitive:
             model_name = m.name.upper()
+
 
         if ("__MODELDEF__" + model_name) in self._statements and isinstance(
                 self._statements[("__MODELDEF__" + model_name)], MASTER_MODEL):
             master = self._statements[("__MODELDEF__" + model_name)]
+
         else:
             d = self.get_object("__LAZYSTATEMENT__" + model_name)
             master = MASTER_MODEL(m.name)
+
             if isinstance(d, LAZY_STATEMENT):
                 d.bind(master, case_insensitive)
                 self.remove_statement(d)
-            if self._lib_command is None:
+
+
+            if self._subckt_command is not None:
+                if self.scope_contains("__MODELDEF__" + model_name):
+                    logging.warning(model_name + " has already been used in this scope")
+
+            elif self._lib_command is None:
                 if self.scope_contains("__MODELDEF__" + model_name):
                     raise NameConflictException(model_name + " has already been used in this scope")
+
             else:
                 if self.local_scope_contains("__MODELDEF__" + model_name):
                     raise NameConflictException(model_name + " has already been used in this scope")
+
 
             self._statements["__MODELDEF__" + model_name] = master
             # Put MASTER_MODEL in indexes (if any care to see it)
