@@ -20,7 +20,7 @@ set(CMAKE_LEGACY_CYGWIN_WIN32 0)
 # Process the Version Numbers
 #------------------------------------
 set(XDM_MAJOR_VERSION "2")
-set(XDM_MINOR_VERSION "6")
+set(XDM_MINOR_VERSION "7")
 set(XDM_PATCH_VERSION "0")
 if( NOT XDM_MAJOR_VERSION MATCHES "[0-9]+" )
   set( XDM_MAJOR_VERSION "X" CACHE STRING "The major version number for this build." )

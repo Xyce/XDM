@@ -327,7 +327,12 @@ class SpectreNetlistBoostParserInterface(object):
                 # If block delimiter is not detected, the next line is just the next
                 # statement, and it will be added to synthesized pnl to be processed
                 # as normally.
-                if not self._delimited_block and pnl_next.type:
+                # Remove the "and pnl_next.type" since it is causing an error if
+                # an instance of a device appears after a device definition. The
+                # better fix is to debug the call to self.convert_next_token
+                # line above, this is not doing the right thing in setting the
+                # pnl_next.type variable.
+                if not self._delimited_block:
                     self._synthesized_pnls.append(pnl_next)
 
             except:
