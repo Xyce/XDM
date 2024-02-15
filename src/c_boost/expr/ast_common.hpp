@@ -44,6 +44,7 @@ const double M_PI = boost::math::constants::pi<double>();
 #include <random>
 #include <string>
 #include <unordered_map>
+#include <sstream>
 
 #include "boost_expr_parser_common.h"
 
